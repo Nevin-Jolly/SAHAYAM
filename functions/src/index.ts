@@ -18,7 +18,7 @@ const geminiApiKey = defineSecret("GEMINI_API_KEY");
 async function synthesizeMalayalamAudio(text: string): Promise<string | null> {
   try {
     if (!text || !text.trim()) return null;
-    const cleanText = text.trim().slice(0, 200); // Keep voice chunks compact and clear
+    const cleanText = text.trim().slice(0, 200);
     const encoded = encodeURIComponent(cleanText);
     const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=ml&client=tw-ob`;
 
@@ -43,17 +43,57 @@ async function synthesizeMalayalamAudio(text: string): Promise<string | null> {
 }
 
 /**
- * Rule-based Malayalam empathetic responses for fallback/offline demo.
+ * Categorizes an elder's statement into a memory taxonomy.
  */
-function getMalayalamFallbackResponse(userPrompt: string): string {
+function categorizeMemory(text: string): "family_fact" | "preference" | "health_note" | "routine" | "conversation_note" {
+  const t = text.toLowerCase();
+  if (t.includes("മകന") || t.includes("മകൻ") || t.includes("മകൾ") || t.includes("മക്കൾ") || t.includes("ഭാര്യ") || t.includes("ഭർത്താ") || t.includes("കൊച്ചുമ") || t.includes("വീട്") || t.includes("കുടുംബം")) {
+    return "family_fact";
+  }
+  if (t.includes("ഇഷ്ട") || t.includes("ചായ") || t.includes("കാപ്പി") || t.includes("പാട്ട്") || t.includes("ഭക്ഷണം") || t.includes("നടക്കാൻ")) {
+    return "preference";
+  }
+  if (t.includes("വേദന") || t.includes("പ്രഷർ") || t.includes("ഷുഗർ") || t.includes("മരുന്ന്") || t.includes("ഗുളിക") || t.includes("ഡോക്ടർ")) {
+    return "health_note";
+  }
+  if (t.includes("രാവിലെ") || t.includes("വൈകുന്നേരം") || t.includes("ഉറക്കം") || t.includes("എഴുന്നേൽ")) {
+    return "routine";
+  }
+  return "conversation_note";
+}
+
+/**
+ * Rule-based Malayalam empathetic responses with cross-session semantic memory awareness.
+ */
+function getMalayalamFallbackResponse(userPrompt: string, memories: string[] = []): string {
   const p = userPrompt.toLowerCase().trim();
+
+  // 1. Recall family-related memories if user asks about family or relatives
+  if (p.includes("മക്കൾ") || p.includes("കുടുംബം") || p.includes("ആരാണ്") || p.includes("ഓർമ്മയുണ്ടോ")) {
+    const familyMem = memories.find((m) =>
+      m.includes("മകൻ") || m.includes("മകൾ") || m.includes("പേര്") || m.includes("രവി") || m.includes("പ്രിയ")
+    );
+    if (familyMem) {
+      return `നിങ്ങൾ മുൻപ് പറഞ്ഞത് ഓർക്കുന്നുണ്ട്: "${familyMem}".`;
+    }
+  }
+
+  // 2. Recall preferences if user asks about tea/food/likes
+  if (p.includes("ചായ") || p.includes("കാപ്പി") || p.includes("ഇഷ്ടം")) {
+    const prefMem = memories.find((m) => m.includes("ചായ") || m.includes("ഇഷ്ട"));
+    if (prefMem) {
+      return `നിങ്ങളുടെ ഇഷ്ടം ഞാൻ ഓർക്കുന്നു: "${prefMem}". ഇപ്പോൾ എന്തെങ്കിലും കഴിച്ചോ?`;
+    }
+  }
+
+  // 3. Greetings & Daily Care
   if (p.includes("നമസ്കാരം") || p.includes("ഹലോ") || p.includes("hello")) {
     return "നമസ്കാരം! സുഖമാണോ? ഇന്ന് എന്തെങ്കിലും സഹായം വേണമോ?";
   }
   if (p.includes("മരുന്ന്") || p.includes("ഗുളിക")) {
     return "ഡോക്ടർ പറഞ്ഞ കൃത്യസമയത്ത് മരുന്ന് കഴിക്കാൻ മറക്കരുത്.";
   }
-  if (p.includes("വിശക്കുന്നു") || p.includes("ഭക്ഷണം") || p.includes("ചായ")) {
+  if (p.includes("വിശക്കുന്നു") || p.includes("ഭക്ഷണം")) {
     return "കൃത്യസമയത്ത് ആഹാരം കഴിക്കുക. ആരോഗ്യമാണ് പ്രധാനം.";
   }
   if (p.includes("വേദന") || p.includes("സുഖമില്ല") || p.includes("വയ്യ")) {
@@ -64,7 +104,13 @@ function getMalayalamFallbackResponse(userPrompt: string): string {
     const timeStr = now.toLocaleTimeString("ml-IN", { hour: "2-digit", minute: "2-digit" });
     return `ഇപ്പോൾ സമയം ${timeStr} ആണ്.`;
   }
-  return "ശരി, ഞാൻ കേട്ടു. ഞാൻ എപ്പോഴും നിങ്ങളുടെ കൂടെയുണ്ട്.";
+
+  // General recall acknowledgment if memory was extracted
+  if (memories.length > 0 && (p.includes("ഓർമ്മ") || p.includes("ഓർക്കുന്നു"))) {
+    return `അതെ, നിങ്ങൾ പറഞ്ഞ കാര്യങ്ങൾ ഞാൻ ഓർക്കുന്നുണ്ട്: "${memories[0]}".`;
+  }
+
+  return "ശരി, ഞാൻ ശ്രദ്ധിച്ചു കേട്ടു. ഞാൻ എപ്പോഴും നിങ്ങളുടെ കൂടെയുണ്ട്.";
 }
 
 /**
@@ -79,12 +125,11 @@ interface CompanionRequest {
 /**
  * Callable Function: respondCompanionVoice
  *
- * Core voice companion reasoning loop:
+ * Core voice companion reasoning loop with Phase 2 Persistent Semantic Memory:
  * 1. Retrieves elder-private semantic memories from Firestore.
- * 2. Queries Google Gemini 2.0 / 1.5 Flash in Malayalam with memory context.
- * 3. Falls back gracefully to curated empathetic Malayalam responses if API key is not configured.
+ * 2. Injects cross-session memories into conversational reasoning context.
+ * 3. Categorizes and persists new personal elder statements.
  * 4. Synthesizes high-fidelity Malayalam MP3 speech audio.
- * 5. Returns both Malayalam text and base64 audio URI for immediate playback.
  */
 export const respondCompanionVoice = onCall(
   {
@@ -105,24 +150,27 @@ export const respondCompanionVoice = onCall(
 
     try {
       // 1. Fetch relevant semantic memories for this elder
-      let memoryContext = "";
+      const memoryTexts: string[] = [];
       try {
         const memoriesSnapshot = await db
           .collection("elders")
           .doc(elderId)
           .collection("memories")
           .orderBy("createdAt", "desc")
-          .limit(5)
+          .limit(8)
           .get();
 
-        memoryContext = memoriesSnapshot.docs
-          .map((doc) => doc.data().text)
-          .join("\n- ");
+        memoriesSnapshot.forEach((doc) => {
+          const t = doc.data().text;
+          if (t) memoryTexts.push(t);
+        });
       } catch (memErr) {
         console.warn("Could not query memories:", memErr);
       }
 
-      // 2. Obtain reply from Gemini or empathetic fallback
+      const memoryContext = memoryTexts.join("\n- ");
+
+      // 2. Obtain reply from Gemini or empathetic memory-aware fallback
       let replyText = "";
       const apiKey = geminiApiKey.value() || process.env.GEMINI_API_KEY;
 
@@ -160,7 +208,7 @@ ${memoryContext ? `- ${memoryContext}` : "(മുൻകാല ഓർമ്മക
       }
 
       if (!replyText) {
-        replyText = getMalayalamFallbackResponse(userPrompt);
+        replyText = getMalayalamFallbackResponse(userPrompt, memoryTexts);
       }
 
       // 3. Synthesize Malayalam MP3 audio
@@ -169,14 +217,15 @@ ${memoryContext ? `- ${memoryContext}` : "(മുൻകാല ഓർമ്മക
 
       // 4. Save meaningful personal statements to elder memory asynchronously
       if (text && text.length > 8) {
+        const category = categorizeMemory(text);
         try {
           await db
             .collection("elders")
             .doc(elderId)
             .collection("memories")
             .add({
-              text: text,
-              category: "conversation_note",
+              text: text.trim(),
+              category,
               createdAt: admin.firestore.FieldValue.serverTimestamp(),
             });
         } catch (saveErr) {
@@ -193,6 +242,86 @@ ${memoryContext ? `- ${memoryContext}` : "(മുൻകാല ഓർമ്മക
     } catch (err: any) {
       console.error("Error in respondCompanionVoice:", err);
       throw new HttpsError("internal", err.message || "Voice companion failed");
+    }
+  }
+);
+
+/**
+ * Callable Function: storeElderMemory (Explicit storage)
+ */
+export const storeElderMemory = onCall(
+  { cors: true },
+  async (request) => {
+    const { elderId, text, category } = request.data as {
+      elderId: string;
+      text: string;
+      category?: string;
+    };
+
+    if (!elderId || !text) {
+      throw new HttpsError("invalid-argument", "elderId and text are required");
+    }
+
+    try {
+      const assignedCategory = category || categorizeMemory(text);
+      const docRef = await db
+        .collection("elders")
+        .doc(elderId)
+        .collection("memories")
+        .add({
+          text: text.trim(),
+          category: assignedCategory,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+      return {
+        success: true,
+        memoryId: docRef.id,
+        category: assignedCategory,
+      };
+    } catch (err: any) {
+      throw new HttpsError("internal", err.message || "Failed storing memory");
+    }
+  }
+);
+
+/**
+ * Callable Function: queryElderMemories
+ */
+export const queryElderMemories = onCall(
+  { cors: true },
+  async (request) => {
+    const { elderId, limit = 10 } = request.data as {
+      elderId: string;
+      limit?: number;
+    };
+
+    if (!elderId) {
+      throw new HttpsError("invalid-argument", "elderId is required");
+    }
+
+    try {
+      const snapshot = await db
+        .collection("elders")
+        .doc(elderId)
+        .collection("memories")
+        .orderBy("createdAt", "desc")
+        .limit(limit)
+        .get();
+
+      const memories = snapshot.docs.map((d) => ({
+        id: d.id,
+        text: d.data().text,
+        category: d.data().category,
+        createdAt: d.data().createdAt?.toDate()?.toISOString() || null,
+      }));
+
+      return {
+        success: true,
+        memories,
+      };
+    } catch (err: any) {
+      throw new HttpsError("internal", err.message || "Failed querying memories");
     }
   }
 );
