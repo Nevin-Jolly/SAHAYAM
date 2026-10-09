@@ -1,0 +1,59 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper: is requesting user the elder themselves
+    function isElder(elderId) {
+      return isAuthenticated() && request.auth.uid == elderId;
+    }
+
+    // Helper: is user in the family care circle for this elder
+    function isFamilyOf(elderId) {
+      return isAuthenticated() &&
+        (request.auth.token.elderId == elderId ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.elderId == elderId);
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Elders Care Data
+    match /elders/{elderId} {
+      allow read: if isElder(elderId) || isFamilyOf(elderId);
+      allow write: if isElder(elderId);
+
+      // ── PRIVACY ENFORCEMENT: Elder Memories are STRICTLY ELDER-PRIVATE ──
+      // Family members are FORBIDDEN from reading or querying elder memories.
+      match /memories/{memoryId} {
+        allow read, write: if isElder(elderId);
+      }
+
+      // Shared Care Data: Medications (Family & Elder can view & update)
+      match /medications/{medId} {
+        allow read: if isElder(elderId) || isFamilyOf(elderId);
+        allow write: if isElder(elderId) || isFamilyOf(elderId);
+      }
+
+      // Shared Care Data: Check-in records
+      match /checkins/{checkinId} {
+        allow read: if isElder(elderId) || isFamilyOf(elderId);
+        allow create, update: if isElder(elderId) || isFamilyOf(elderId);
+      }
+
+      // Shared Care Data: Escalations
+      match /escalations/{escalationId} {
+        allow read: if isElder(elderId) || isFamilyOf(elderId);
+        allow create, update: if isElder(elderId) || isFamilyOf(elderId);
+      }
+    }
+  }
+}

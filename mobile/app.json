@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "Sahayam",
+    "slug": "sahayam",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "android": {
+      "package": "com.sahayam.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0D0D1A",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ],
+      "predictiveBackGestureEnabled": false,
+      "googleServicesFile": "./google-services.json"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.sahayam.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Sahayam needs microphone access to listen to your voice and respond in Malayalam."
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-audio"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "c9125372-1f52-419e-9451-15a307620209"
+      }
+    }
+  }
+}
