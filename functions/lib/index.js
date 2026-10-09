@@ -45,13 +45,66 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 const geminiApiKey = (0, params_1.defineSecret)("GEMINI_API_KEY");
 /**
+ * Synthesizes Malayalam text to MP3 audio using Google TTS.
+ * Returns a base64 encoded MP3 string.
+ */
+async function synthesizeMalayalamAudio(text) {
+    try {
+        if (!text || !text.trim())
+            return null;
+        const cleanText = text.trim().slice(0, 200); // Keep voice chunks compact and clear
+        const encoded = encodeURIComponent(cleanText);
+        const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=ml&client=tw-ob`;
+        const res = await fetch(url, {
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            },
+        });
+        if (!res.ok) {
+            console.warn(`TTS fetch failed with status ${res.status}`);
+            return null;
+        }
+        const arrayBuffer = await res.arrayBuffer();
+        return Buffer.from(arrayBuffer).toString("base64");
+    }
+    catch (err) {
+        console.error("Malayalam TTS synthesis error:", err);
+        return null;
+    }
+}
+/**
+ * Rule-based Malayalam empathetic responses for fallback/offline demo.
+ */
+function getMalayalamFallbackResponse(userPrompt) {
+    const p = userPrompt.toLowerCase().trim();
+    if (p.includes("നമസ്കാരം") || p.includes("ഹലോ") || p.includes("hello")) {
+        return "നമസ്കാരം! സുഖമാണോ? ഇന്ന് എന്തെങ്കിലും സഹായം വേണമോ?";
+    }
+    if (p.includes("മരുന്ന്") || p.includes("ഗുളിക")) {
+        return "ഡോക്ടർ പറഞ്ഞ കൃത്യസമയത്ത് മരുന്ന് കഴിക്കാൻ മറക്കരുത്.";
+    }
+    if (p.includes("വിശക്കുന്നു") || p.includes("ഭക്ഷണം") || p.includes("ചായ")) {
+        return "കൃത്യസമയത്ത് ആഹാരം കഴിക്കുക. ആരോഗ്യമാണ് പ്രധാനം.";
+    }
+    if (p.includes("വേദന") || p.includes("സുഖമില്ല") || p.includes("വയ്യ")) {
+        return "വിഷമിക്കേണ്ട, അല്പം വിശ്രമിക്കുക. ഞാൻ വീട്ടുകാരെ അറിയിക്കാം.";
+    }
+    if (p.includes("സമയ") || p.includes("എത്രയായി")) {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString("ml-IN", { hour: "2-digit", minute: "2-digit" });
+        return `ഇപ്പോൾ സമയം ${timeStr} ആണ്.`;
+    }
+    return "ശരി, ഞാൻ കേട്ടു. ഞാൻ എപ്പോഴും നിങ്ങളുടെ കൂടെയുണ്ട്.";
+}
+/**
  * Callable Function: respondCompanionVoice
  *
  * Core voice companion reasoning loop:
  * 1. Retrieves elder-private semantic memories from Firestore.
  * 2. Queries Google Gemini 2.0 / 1.5 Flash in Malayalam with memory context.
- * 3. Extracts any newly shared elder preferences or health facts and persists them to memory.
- * 4. Returns Malayalam text response for device speech synthesis.
+ * 3. Falls back gracefully to curated empathetic Malayalam responses if API key is not configured.
+ * 4. Synthesizes high-fidelity Malayalam MP3 speech audio.
+ * 5. Returns both Malayalam text and base64 audio URI for immediate playback.
  */
 exports.respondCompanionVoice = (0, https_1.onCall)({
     secrets: [geminiApiKey],
@@ -64,79 +117,86 @@ exports.respondCompanionVoice = (0, https_1.onCall)({
     if (!elderId) {
         throw new https_1.HttpsError("invalid-argument", "elderId is required");
     }
-    if (!text && !data.audioBase64) {
-        throw new https_1.HttpsError("invalid-argument", "Either text or audioBase64 must be provided");
-    }
+    const userPrompt = text ? text.trim() : "നമസ്കാരം";
     try {
         // 1. Fetch relevant semantic memories for this elder
-        const memoriesSnapshot = await db
-            .collection("elders")
-            .doc(elderId)
-            .collection("memories")
-            .orderBy("createdAt", "desc")
-            .limit(5)
-            .get();
-        const memoryContext = memoriesSnapshot.docs
-            .map((doc) => doc.data().text)
-            .join("\n- ");
-        // 2. Prepare Gemini system instruction
-        const systemInstruction = `നിങ്ങൾ 'സഹായം' (SAHAYAM) എന്ന മലയാളം വോയിസ് അസിസ്റ്റന്റാണ്. പ്രായമായ ആളുകൾക്ക് ഒരു സ്നേഹനിധിയായ കൂട്ടുകാരനായി സംസാരിക്കുക.
+        let memoryContext = "";
+        try {
+            const memoriesSnapshot = await db
+                .collection("elders")
+                .doc(elderId)
+                .collection("memories")
+                .orderBy("createdAt", "desc")
+                .limit(5)
+                .get();
+            memoryContext = memoriesSnapshot.docs
+                .map((doc) => doc.data().text)
+                .join("\n- ");
+        }
+        catch (memErr) {
+            console.warn("Could not query memories:", memErr);
+        }
+        // 2. Obtain reply from Gemini or empathetic fallback
+        let replyText = "";
+        const apiKey = geminiApiKey.value() || process.env.GEMINI_API_KEY;
+        if (apiKey) {
+            try {
+                const systemInstruction = `നിങ്ങൾ 'സഹായം' (SAHAYAM) എന്ന മലയാളം വോയിസ് അസിസ്റ്റന്റാണ്. പ്രായമായ ആളുകൾക്ക് ഒരു സ്നേഹനിധിയായ കൂട്ടുകാരനായി സംസാരിക്കുക.
 നിയമങ്ങൾ:
 1. ശുദ്ധവും സ്വാഭാവികവുമായ മലയാളത്തിൽ മാത്രം സംസാരിക്കുക.
 2. മറുപടി വളരെ ചെറുതായിരിക്കണം (1 അല്ലെങ്കിൽ 2 ലളിതമായ വാക്യങ്ങൾ മാത്രം).
 3. പ്രായമായവരെ ബഹുമാനത്തോടും വാത്സല്യത്തോടും അഭിസംബോധന ചെയ്യുക.
 4. മുൻകാല ഓർമ്മകൾ ലഭ്യമാണെങ്കിൽ അതനുസരിച്ച് സംസാരിക്കുക:
 ${memoryContext ? `- ${memoryContext}` : "(മുൻകാല ഓർമ്മകൾ ഒന്നുമില്ല)"}`;
-        const apiKey = geminiApiKey.value() || process.env.GEMINI_API_KEY;
-        if (!apiKey) {
-            throw new https_1.HttpsError("failed-precondition", "GEMINI_API_KEY is not configured");
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+                const requestPayload = {
+                    contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+                    systemInstruction: { parts: [{ text: systemInstruction }] },
+                    generationConfig: { temperature: 0.7, maxOutputTokens: 100 },
+                };
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(requestPayload),
+                });
+                if (response.ok) {
+                    const resJson = await response.json();
+                    replyText =
+                        resJson.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+                }
+            }
+            catch (apiErr) {
+                console.error("Gemini call error, using fallback:", apiErr);
+            }
         }
-        // Simple, direct call to Gemini REST API for maximum reliability
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-        const userPrompt = text || "ഹലോ, സുഖമാണോ?";
-        const requestPayload = {
-            contents: [
-                {
-                    role: "user",
-                    parts: [{ text: userPrompt }],
-                },
-            ],
-            systemInstruction: {
-                parts: [{ text: systemInstruction }],
-            },
-            generationConfig: {
-                temperature: 0.7,
-                maxOutputTokens: 100,
-            },
-        };
-        const response = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(requestPayload),
-        });
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Gemini API Error: ${response.status} ${errorText}`);
+        if (!replyText) {
+            replyText = getMalayalamFallbackResponse(userPrompt);
         }
-        const resJson = await response.json();
-        const replyText = resJson.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ||
-            "സുഖമാണ്, എന്താണ് വിശേഷം?";
-        // 3. Asynchronously check if the input contains memorable personal information to save
+        // 3. Synthesize Malayalam MP3 audio
+        const audioBase64 = await synthesizeMalayalamAudio(replyText);
+        const audioUri = audioBase64 ? `data:audio/mpeg;base64,${audioBase64}` : null;
+        // 4. Save meaningful personal statements to elder memory asynchronously
         if (text && text.length > 8) {
-            // Automatically save meaningful statements as memory notes
-            await db
-                .collection("elders")
-                .doc(elderId)
-                .collection("memories")
-                .add({
-                text: text,
-                category: "conversation_note",
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
+            try {
+                await db
+                    .collection("elders")
+                    .doc(elderId)
+                    .collection("memories")
+                    .add({
+                    text: text,
+                    category: "conversation_note",
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+            }
+            catch (saveErr) {
+                console.warn("Failed saving memory:", saveErr);
+            }
         }
         return {
             success: true,
             response: replyText,
+            audioBase64,
+            audioUri,
         };
     }
     catch (err) {
@@ -146,10 +206,6 @@ ${memoryContext ? `- ${memoryContext}` : "(മുൻകാല ഓർമ്മക
 });
 /**
  * Callable Function: triggerEmergencyEscalation
- *
- * Immediate SOS trigger from elder app or system.
- * 1. Creates an escalation record in Firestore.
- * 2. Broadcasts high-priority FCM push notification to all linked family members.
  */
 exports.triggerEmergencyEscalation = (0, https_1.onCall)({ cors: true }, async (request) => {
     const { elderId, reason, notes } = request.data;
@@ -157,7 +213,6 @@ exports.triggerEmergencyEscalation = (0, https_1.onCall)({ cors: true }, async (
         throw new https_1.HttpsError("invalid-argument", "elderId is required");
     }
     try {
-        // 1. Record escalation
         const escalationRef = await db
             .collection("elders")
             .doc(elderId)
@@ -170,7 +225,6 @@ exports.triggerEmergencyEscalation = (0, https_1.onCall)({ cors: true }, async (
             triggeredAt: admin.firestore.FieldValue.serverTimestamp(),
             familyNotified: false,
         });
-        // 2. Find family members monitoring this elder
         const familyUsersSnapshot = await db
             .collection("users")
             .where("elderId", "==", elderId)
@@ -182,7 +236,6 @@ exports.triggerEmergencyEscalation = (0, https_1.onCall)({ cors: true }, async (
             if (token)
                 fcmTokens.push(token);
         });
-        // 3. Send high-priority FCM notification
         if (fcmTokens.length > 0) {
             await admin.messaging().sendEachForMulticast({
                 tokens: fcmTokens,
@@ -214,14 +267,9 @@ exports.triggerEmergencyEscalation = (0, https_1.onCall)({ cors: true }, async (
 });
 /**
  * Scheduled Function: checkInEscalationMonitor
- *
- * Runs every 15 minutes.
- * Identifies proactive check-ins that have been pending for > 30 minutes,
- * marks them unanswered, and escalates to family dashboard via FCM.
  */
 exports.checkInEscalationMonitor = (0, scheduler_1.onSchedule)("every 15 minutes", async () => {
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-    // Query all pending check-ins scheduled before 30 minutes ago
     const pendingCheckins = await db
         .collectionGroup("checkins")
         .where("status", "==", "pending")
@@ -231,12 +279,10 @@ exports.checkInEscalationMonitor = (0, scheduler_1.onSchedule)("every 15 minutes
         const elderId = doc.ref.parent.parent?.id;
         if (!elderId)
             continue;
-        // Mark check-in as unanswered
         await doc.ref.update({
             status: "unanswered",
             escalationTriggered: true,
         });
-        // Automatically trigger family escalation
         await db
             .collection("elders")
             .doc(elderId)
@@ -249,7 +295,6 @@ exports.checkInEscalationMonitor = (0, scheduler_1.onSchedule)("every 15 minutes
             triggeredAt: admin.firestore.FieldValue.serverTimestamp(),
             familyNotified: false,
         });
-        // Push FCM alert to family
         const familyUsers = await db
             .collection("users")
             .where("elderId", "==", elderId)

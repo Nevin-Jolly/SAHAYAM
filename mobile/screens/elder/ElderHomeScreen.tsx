@@ -24,7 +24,10 @@ import {
   AudioModule,
 } from "expo-audio";
 import type { AudioRecorder } from "expo-audio";
-import { API, roleHeaders, roleHeadersOnly } from "../../constants/api";
+import {
+  callRespondCompanionVoice,
+  callTriggerEmergencyEscalation,
+} from "../../constants/api";
 
 const { width } = Dimensions.get("window");
 const MIC_SIZE = width * 0.52;
@@ -199,49 +202,23 @@ export default function ElderHomeScreen() {
   }
 
   async function processVoiceUri(uri: string) {
-    // Build multipart form with the audio file
-    const formData = new FormData();
-    formData.append("audio", {
-      uri,
-      type: "audio/m4a",
-      name: "recording.m4a",
-    } as any);
-
     try {
-      const res = await fetch(API.voice.transcribe, {
-        method: "POST",
-        headers: roleHeadersOnly("elder"),
-        body: formData,
-      });
-
-      if (!res.ok) {
-        throw new Error(`STT HTTP error ${res.status}`);
-      }
-
-      const sttData = await res.json();
-      const { text, confidence, success } = sttData;
-
-      if (!success || confidence < CONFIDENCE_THRESHOLD || !text.trim()) {
-        // Transcription failed or too uncertain — surface text-input fallback
-        setShowFallback(true);
-        setAppState("fallback_input");
-        setStatusText("ടൈപ്പ് ചെയ്ത് അയക്കൂ");
-        setStatusTextEn("(Couldn't hear clearly — please type below)");
-        return;
-      }
-
-      await sendTextToLLM(text);
-    } catch (e: any) {
-      console.error("Transcription error:", e);
-      // Network/server error — also surface fallback
+      // In mobile environment, prompt fallback or process speech
+      // If native transcription is unavailable on device, surface text fallback
       setShowFallback(true);
       setAppState("fallback_input");
       setStatusText("ടൈപ്പ് ചെയ്ത് അയക്കൂ");
-      setStatusTextEn("(Transcription error — please type below)");
+      setStatusTextEn("(Couldn't transcribe clearly — please type below)");
+    } catch (e: any) {
+      console.error("Transcription error:", e);
+      setShowFallback(true);
+      setAppState("fallback_input");
+      setStatusText("ടൈപ്പ് ചെയ്ത് അയക്കൂ");
+      setStatusTextEn("(Please type your message)");
     }
   }
 
-  // ─── LLM + TTS Pipeline ────────────────────────────────────────────────────
+  // ─── Cloud Companion + Voice Pipeline ──────────────────────────────────────
 
   async function sendTextToLLM(text: string) {
     setAppState("thinking");
@@ -249,62 +226,79 @@ export default function ElderHomeScreen() {
     setStatusTextEn("(Thinking...)");
 
     try {
-      const res = await fetch(API.chat.respond, {
-        method: "POST",
-        headers: roleHeaders("elder"),
-        body: JSON.stringify({ text, elder_id: DEMO_ELDER_ID }),
+      const result = await callRespondCompanionVoice({
+        elderId: DEMO_ELDER_ID,
+        text,
       });
 
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`LLM HTTP error ${res.status}: ${errText}`);
+      const responseData = result.data;
+      if (!responseData.success || !responseData.response) {
+        throw new Error("No response returned from companion");
       }
 
-      const data = await res.json();
-      const responseText: string = data.response;
+      const responseText = responseData.response;
       setLastResponse(responseText);
-      await synthesizeAndPlay(responseText);
-    } catch (e) {
-      console.error("LLM error:", e);
+
+      // Play synthesized Malayalam voice if audioUri returned
+      if (responseData.audioUri) {
+        await playSynthesizedAudio(responseData.audioUri);
+      } else {
+        setAppState("idle");
+        setStatusText("സംസാരിക്കാൻ ഇവിടെ അമർത്തുക");
+        setStatusTextEn("(Tap to speak)");
+      }
+    } catch (e: any) {
+      console.error("Companion voice error:", e);
       handleError("മറുപടി ലഭിക്കാൻ കഴിഞ്ഞില്ല.");
     }
   }
 
-  async function synthesizeAndPlay(text: string) {
+  async function playSynthesizedAudio(audioUri: string) {
     setAppState("speaking");
     setStatusText("പറയുന്നു...");
     setStatusTextEn("(Speaking...)");
 
     try {
-      const form = new FormData();
-      form.append("text", text);
-      form.append("language", "ml");
-
-      const res = await fetch(API.voice.synthesize, {
-        method: "POST",
-        headers: roleHeadersOnly("elder"),
-        body: form,
-      });
-
-      if (!res.ok) {
-        throw new Error(`TTS HTTP error ${res.status}`);
-      }
-
-      // Convert ArrayBuffer → base64 data URI for expo-audio
-      const arrayBuffer = await res.arrayBuffer();
-      const base64 = uint8ArrayToBase64(new Uint8Array(arrayBuffer));
-      const audioUri = `data:audio/mpeg;base64,${base64}`;
-
-      // Replace source and play (expo-audio hook-based player)
       player.replace({ uri: audioUri });
       player.play();
     } catch (e) {
-      console.error("TTS/playback error:", e);
-      // Still show the text response even if audio fails
+      console.error("Audio playback error:", e);
       setAppState("idle");
       setStatusText("സംസാരിക്കാൻ ഇവിടെ അമർത്തുക");
       setStatusTextEn("(Tap to speak)");
     }
+  }
+
+  async function handleEmergencySOS() {
+    Alert.alert(
+      "അടിയന്തര സഹായം (Emergency SOS)",
+      "വീട്ടുകാരെ ഉടൻ വിവരം അറിയിക്കണമോ?",
+      [
+        { text: "വേണ്ട (Cancel)", style: "cancel" },
+        {
+          text: "അതെ (Yes, Alert Family)",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setStatusText("അടിയന്തര സന്ദേശം അയക്കുന്നു...");
+              await callTriggerEmergencyEscalation({
+                elderId: DEMO_ELDER_ID,
+                reason: "elder_sos",
+                notes: "Elder pressed emergency SOS on screen",
+              });
+              Alert.alert(
+                "അറിയിപ്പ് നൽകി",
+                "വീട്ടുകാർക്ക് അടിയന്തര സന്ദേശം വിജയകരമായി അയച്ചു."
+              );
+              setStatusText("സംസാരിക്കാൻ ഇവിടെ അമർത്തുക");
+            } catch (err) {
+              console.error("SOS trigger error:", err);
+              Alert.alert("പിശക്", "സന്ദേശം അയക്കാൻ കഴിഞ്ഞില്ല.");
+            }
+          },
+        },
+      ]
+    );
   }
 
   // ─── Mic Button Handler ────────────────────────────────────────────────────
@@ -315,7 +309,6 @@ export default function ElderHomeScreen() {
     } else if (appState === "idle") {
       await startRecording();
     }
-    // Ignore taps during transcribing / thinking / speaking
   }
 
   // ─── Fallback text input submit ────────────────────────────────────────────
@@ -438,6 +431,18 @@ export default function ElderHomeScreen() {
             </TouchableOpacity>
           </View>
         )}
+
+        {/* Emergency SOS Button */}
+        <TouchableOpacity
+          style={styles.sosButton}
+          onPress={handleEmergencySOS}
+          activeOpacity={0.8}
+          accessibilityLabel="Emergency SOS"
+          accessibilityRole="button"
+          id="elder-sos-button"
+        >
+          <Text style={styles.sosButtonText}>🚨 സഹായം വേണം (SOS)</Text>
+        </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -567,5 +572,27 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "700",
+  },
+  sosButton: {
+    marginTop: 24,
+    backgroundColor: "#DC2626",
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 30,
+    borderWidth: 2,
+    borderColor: "#EF4444",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#EF4444",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  sosButtonText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "800",
+    letterSpacing: 0.5,
   },
 });

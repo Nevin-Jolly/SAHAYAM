@@ -1,30 +1,48 @@
 /**
  * SAHAYAM — API constants & request helpers
  *
- * BASE_URL must be updated each time ngrok restarts, since ngrok generates
- * a new public URL per session. This is a known limitation (Risk 1 in plan).
- *
- * How to update:
- *   1. Run: python backend/ngrok_start.py
- *   2. Copy the printed URL
- *   3. Paste it here and save
- *   4. Reload the Expo app
- *
- * Phase 6: roleHeaders(role) added — pass to every fetch() call so the
- * backend RBAC dependency (auth.py) can enforce endpoint access control.
+ * Firebase Project: sahayam-33cd4
  */
 
-// Replace with the URL printed by ngrok_start.py before each demo session
-export const BASE_URL = "https://slapping-concert-gem.ngrok-free.dev";
+import { functions } from "./firebase";
+import { httpsCallable } from "firebase/functions";
 
+export const BASE_URL = "https://us-central1-sahayam-33cd4.cloudfunctions.net";
+
+/**
+ * Type definitions for Companion Interaction
+ */
+export interface CompanionResponse {
+  success: boolean;
+  response: string;
+  audioBase64?: string;
+  audioUri?: string;
+}
+
+/**
+ * Callable Functions (Firebase SDK native)
+ */
+export const callRespondCompanionVoice = httpsCallable<
+  { elderId: string; text?: string; audioBase64?: string },
+  CompanionResponse
+>(functions, "respondCompanionVoice");
+
+export const callTriggerEmergencyEscalation = httpsCallable<
+  { elderId: string; reason: string; notes?: string },
+  { success: boolean; escalationId: string }
+>(functions, "triggerEmergencyEscalation");
+
+/**
+ * REST / HTTP API endpoints
+ */
 export const API = {
   health: `${BASE_URL}/health`,
   voice: {
-    transcribe: `${BASE_URL}/voice/transcribe`,
-    synthesize: `${BASE_URL}/voice/synthesize`,
+    transcribe: `${BASE_URL}/transcribe`,
+    synthesize: `${BASE_URL}/synthesize`,
   },
   chat: {
-    respond: `${BASE_URL}/chat/respond`,
+    respond: `${BASE_URL}/respondCompanionVoice`,
   },
   medications: `${BASE_URL}/medications`,
   checkins: `${BASE_URL}/checkins`,
@@ -38,13 +56,6 @@ export const API = {
 
 /**
  * Returns headers with Content-Type + X-Role for JSON endpoints.
- *
- * Usage:
- *   fetch(API.chat.respond, {
- *     method: "POST",
- *     headers: roleHeaders("elder"),
- *     body: JSON.stringify({ ... }),
- *   });
  */
 export function roleHeaders(role: "elder" | "family"): Record<string, string> {
   return {
@@ -55,17 +66,7 @@ export function roleHeaders(role: "elder" | "family"): Record<string, string> {
 }
 
 /**
- * Returns headers with X-Role only (for multipart/form-data or non-JSON endpoints
- * where Content-Type is set automatically by fetch/FormData).
- *
- * Usage:
- *   const form = new FormData();
- *   form.append("audio", { ... });
- *   fetch(API.voice.transcribe, {
- *     method: "POST",
- *     headers: roleHeadersOnly("elder"),
- *     body: form,
- *   });
+ * Returns headers with X-Role only for multipart/form-data or non-JSON endpoints.
  */
 export function roleHeadersOnly(role: "elder" | "family"): Record<string, string> {
   return {
