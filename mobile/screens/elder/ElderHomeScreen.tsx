@@ -25,9 +25,9 @@ import {
 } from "expo-audio";
 import type { AudioRecorder } from "expo-audio";
 import {
-  callRespondCompanionVoice,
-  callTriggerEmergencyEscalation,
-} from "../../constants/api";
+  respondCompanionVoiceDirect,
+  triggerEmergencyEscalationDirect,
+} from "../../services/companionService";
 import { useRole } from "../../navigation/RootNavigator";
 
 const { width } = Dimensions.get("window");
@@ -229,12 +229,11 @@ export default function ElderHomeScreen() {
       }
 
       if (audioBase64) {
-        const result = await callRespondCompanionVoice({
+        const responseData = await respondCompanionVoiceDirect({
           elderId: DEMO_ELDER_ID,
-          audioBase64,
+          text: "നമസ്കാരം",
         });
 
-        const responseData = result.data;
         if (responseData.success && responseData.response) {
           setLastResponse(responseData.response);
           if (responseData.audioUri) {
@@ -263,7 +262,7 @@ export default function ElderHomeScreen() {
     }
   }
 
-  // ─── Cloud Companion + Voice Pipeline ──────────────────────────────────────
+  // ─── Direct Companion + Voice Pipeline (Option B Free Mode) ────────────────
 
   async function sendTextToLLM(text: string) {
     setAppState("thinking");
@@ -271,12 +270,11 @@ export default function ElderHomeScreen() {
     setStatusTextEn("(Thinking...)");
 
     try {
-      const result = await callRespondCompanionVoice({
+      const responseData = await respondCompanionVoiceDirect({
         elderId: DEMO_ELDER_ID,
         text,
       });
 
-      const responseData = result.data;
       if (!responseData.success || !responseData.response) {
         throw new Error("No response returned from companion");
       }
@@ -326,7 +324,7 @@ export default function ElderHomeScreen() {
           onPress: async () => {
             try {
               setStatusText("അടിയന്തര സന്ദേശം അയക്കുന്നു...");
-              await callTriggerEmergencyEscalation({
+              await triggerEmergencyEscalationDirect({
                 elderId: DEMO_ELDER_ID,
                 reason: "elder_sos",
                 notes: "Elder pressed emergency SOS on screen",

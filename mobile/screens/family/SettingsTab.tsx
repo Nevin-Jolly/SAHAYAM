@@ -8,7 +8,7 @@ import {
   TextInput,
   Alert,
 } from "react-native";
-import { callSetCareNote } from "../../constants/api";
+import { setCareNoteDirect } from "../../services/companionService";
 import { useRole } from "../../navigation/RootNavigator";
 
 /**
@@ -38,11 +38,11 @@ export default function SettingsTab() {
     setCareNoteSaving(true);
     setCareNoteResult(null);
     try {
-      const result = await callSetCareNote({
+      const result = await setCareNoteDirect({
         elderId: elderId.trim(),
         note: careNote.trim(),
       });
-      if (result.data.saved) {
+      if (result.saved) {
         setCareNoteResult("✓ Care note saved. SAHAYAM will share it with the elder in the next conversation.");
       } else {
         setCareNoteResult("✓ Care note cleared.");
