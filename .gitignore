@@ -12,6 +12,8 @@ npm-debug.*
 !app.json
 !eas.json
 !firebase.json
+!firestore.indexes.json
+!google-services.json
 .env
 .env.*
 !.env.example

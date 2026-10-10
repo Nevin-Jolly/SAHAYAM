@@ -5,20 +5,21 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   StatusBar,
 } from "react-native";
-import { API } from "../constants/api";
 
 /**
- * LoginScreen — Phase 6: Role selection with backend health check.
+ * LoginScreen — Phase 7 update: Role selection without HTTP health check.
  *
- * Replaces the hardcoded CURRENT_ROLE in RootNavigator.
- * Two large buttons: "I am the Elder" / "I am a Family Member".
- * Tapping either:
- *   1. Pings /health to confirm backend is reachable (early failure feedback).
- *   2. Stores the selected role.
- *   3. Calls onLogin(role) to advance to the role-appropriate screen.
+ * The backend is Firebase Callable Functions only — there is no REST /health
+ * endpoint, so the previous health-check ping was blocking login.
+ *
+ * Flow (simplified):
+ *   1. User taps "Elder" or "Family Member".
+ *   2. A 400 ms loading state gives visual feedback.
+ *   3. onLogin(role) is called, advancing to the role-appropriate screen.
+ *   4. If the callable functions are unreachable, each screen shows its own
+ *      error feedback when actual data calls fail.
  *
  * Phase 6 privacy note displayed inline:
  *   Conversation history is private to the elder; family sees structured data only.
@@ -38,36 +39,11 @@ export default function LoginScreen({ onLogin }: Props) {
   const handleRoleSelect = async (role: "elder" | "family") => {
     setSelectedRole(role);
     setChecking(true);
-
-    try {
-      const res = await fetch(API.health, {
-        method: "GET",
-        headers: { "X-Role": role },
-      });
-
-      if (!res.ok) {
-        if (res.status === 404) {
-          throw new Error("Backend returned status 404. Your ngrok tunnel is offline or BASE_URL in constants/api.ts is outdated.");
-        }
-        throw new Error(`Backend returned status ${res.status}`);
-      }
-
-      // Backend is reachable — proceed to the role screen
-      onLogin(role);
-    } catch (e: any) {
-      Alert.alert(
-        "Cannot Reach Server",
-        "The SAHAYAM backend is not reachable.\n\n" +
-          "Please check that:\n" +
-          "• The FastAPI server is running\n" +
-          "• ngrok is active and BASE_URL in api.ts is updated\n\n" +
-          `Error: ${e.message}`,
-        [{ text: "OK" }]
-      );
-    } finally {
-      setChecking(false);
-      setSelectedRole(null);
-    }
+    // Brief loading state for UX feedback, then navigate.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    setChecking(false);
+    setSelectedRole(null);
+    onLogin(role);
   };
 
   return (

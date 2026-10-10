@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.medicationReminderScheduler = exports.recordCheckInOutcome = exports.scheduleProactiveCheckIn = exports.checkInEscalationMonitor = exports.triggerEmergencyEscalation = exports.queryElderMemories = exports.storeElderMemory = exports.respondCompanionVoice = void 0;
+exports.setCareNote = exports.medicationReminderScheduler = exports.recordCheckInOutcome = exports.scheduleProactiveCheckIn = exports.checkInEscalationMonitor = exports.triggerEmergencyEscalation = exports.queryElderMemories = exports.storeElderMemory = exports.respondCompanionVoice = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const params_1 = require("firebase-functions/params");
@@ -90,6 +90,63 @@ function categorizeMemory(text) {
         return "routine";
     }
     return "conversation_note";
+}
+/**
+ * Phase 7 — Local Awareness Helper
+ *
+ * Returns a Malayalam-language daily context string containing:
+ * - Current day of week in Malayalam
+ * - Current date formatted in ml-IN locale
+ * - Current time (Kerala IST)
+ * - Simple morning/afternoon/evening/night greeting context
+ * - Any pending family care note stored for this elder
+ */
+async function getMalayalamDailyContext(elderId) {
+    // Kerala is IST = UTC+5:30
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+    const malayalamDays = [
+        "ഞായർ", // Sunday
+        "തിങ്കൾ", // Monday
+        "ചൊവ്വ", // Tuesday
+        "ബുധൻ", // Wednesday
+        "വ്യാഴം", // Thursday
+        "വെള്ളി", // Friday
+        "ശനി", // Saturday
+    ];
+    const hour = now.getHours();
+    const dayName = malayalamDays[now.getDay()];
+    const dateStr = now.toLocaleDateString("ml-IN", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+    });
+    const timeStr = now.toLocaleTimeString("ml-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+    let timeGreeting = "";
+    if (hour >= 5 && hour < 12)
+        timeGreeting = "ഒരു നല്ല പ്രഭാതം";
+    else if (hour >= 12 && hour < 17)
+        timeGreeting = "ഒരു നല്ല ഉച്ചതിരിഞ്ഞ് സമയം";
+    else if (hour >= 17 && hour < 21)
+        timeGreeting = "ഒരു നല്ല വൈകുന്നേരം";
+    else
+        timeGreeting = "ഒരു നല്ല രാത്രി";
+    const contextBlock = `ഇന്ന് ${dayName}, ${dateStr}. സമയം ${timeStr} ആണ്. ${timeGreeting} ആശംസിക്കുന്നു.`;
+    // Fetch family care note if available
+    let careNote = null;
+    try {
+        const elderDoc = await db.collection("elders").doc(elderId).get();
+        const storedNote = elderDoc.data()?.careNote;
+        if (storedNote && storedNote.trim()) {
+            careNote = storedNote.trim();
+        }
+    }
+    catch (_) {
+        // Non-fatal: proceed without care note
+    }
+    return { contextBlock, careNote };
 }
 /**
  * Rule-based Malayalam empathetic responses with cross-session semantic memory awareness.
@@ -155,6 +212,8 @@ exports.respondCompanionVoice = (0, https_1.onCall)({
         throw new https_1.HttpsError("invalid-argument", "elderId is required");
     }
     const userPrompt = text ? text.trim() : "നമസ്കാരം";
+    // Phase 7: Fetch daily context + family care note
+    const { contextBlock, careNote } = await getMalayalamDailyContext(elderId);
     try {
         // 1. Fetch relevant semantic memories for this elder
         const memoryTexts = [];
@@ -181,13 +240,18 @@ exports.respondCompanionVoice = (0, https_1.onCall)({
         const apiKey = geminiApiKey.value() || process.env.GEMINI_API_KEY;
         if (apiKey) {
             try {
-                const systemInstruction = `നിങ്ങൾ 'സഹായം' (SAHAYAM) എന്ന മലയാളം വോയിസ് അസിസ്റ്റന്റാണ്. പ്രായമായ ആളുകൾക്ക് ഒരു സ്നേഹനിധിയായ കൂട്ടുകാരനായി സംസാരിക്കുക.
-നിയമങ്ങൾ:
-1. ശുദ്ധവും സ്വാഭാവികവുമായ മലയാളത്തിൽ മാത്രം സംസാരിക്കുക.
-2. മറുപടി വളരെ ചെറുതായിരിക്കണം (1 അല്ലെങ്കിൽ 2 ലളിതമായ വാക്യങ്ങൾ മാത്രം).
-3. പ്രായമായവരെ ബഹുമാനത്തോടും വാത്സല്യത്തോടും അഭിസംബോധന ചെയ്യുക.
-4. മുൻകാല ഓർമ്മകൾ ലഭ്യമാണെങ്കിൽ അതനുസരിച്ച് സംസാരിക്കുക:
-${memoryContext ? `- ${memoryContext}` : "(മുൻകാല ഓർമ്മകൾ ഒന്നുമില്ല)"}`;
+                // Phase 7: Build system instruction with daily context + care note
+                const careNoteBlock = careNote
+                    ? `\n5. ഇന്ന് കുടുംബം ഒരു സ്നേഹ സന്ദേശം അയച്ചിട്ടുണ്ട്: "${careNote}". ഉചിതമായ നിമിഷത്തിൽ ഇത് ലളിതമായി പ്രകടിപ്പിക്കുക.`
+                    : "";
+                const systemInstruction = `നിങ്ങൾ 'സഹായം' (SAHAYAM) എന്ന മലയാളം വോയിസ് അസിസ്റ്റന്റാണ്. പ്രായമായ ആളുകൾക്ക് ഒരു സ്നേഹനിധിയായ കൂട്ടുകാരനായി സംസാരിക്കുക.` +
+                    `\nആജ്ഞകൾ:` +
+                    `\n1. ശുദ്ധവും സ്വാഭാവികവുമായ മലയാളത്തിൽ മാത്രം സംസാരിക്കുക.` +
+                    `\n2. മറുപടി വളരെ ചെറുതായിരിക്കണം (1 അല്ലെങ്കിൽ 2 ലളിതമായ വാക്യങ്ങൾ മാത്രം).` +
+                    `\n3. പ്രായമായവരെ ബഹുമാനത്തോടും വാത്സല്യത്തോടും അഭിസംബോധന ചെയ്യുക.` +
+                    `\n4. ഇന്നത്തെ ദിവസ സന്ദർഭം: ${contextBlock}` +
+                    (memoryContext ? `\n   മുൻകാല ഓർമ്മകൾ: ${memoryContext}` : "") +
+                    careNoteBlock;
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
                 const requestPayload = {
                     contents: [{ role: "user", parts: [{ text: userPrompt }] }],
@@ -513,6 +577,30 @@ exports.medicationReminderScheduler = (0, scheduler_1.onSchedule)("0 * * * *", a
                 },
             });
         }
+    }
+});
+/**
+ * Callable Function: setCareNote (Phase 7 — Social Bridging)
+ *
+ * Stores a short care note from a family member into the elder's Firestore document.
+ * The note is injected by respondCompanionVoice into the next Gemini system prompt
+ * so the elder companion speaks it naturally during conversation.
+ *
+ * One note at a time per elder — new note overwrites the previous.
+ * Note is capped at 280 characters (~2 short sentences) to stay voice-friendly.
+ */
+exports.setCareNote = (0, https_1.onCall)({ cors: true }, async (request) => {
+    const { elderId, note } = request.data;
+    if (!elderId) {
+        throw new https_1.HttpsError("invalid-argument", "elderId is required");
+    }
+    const trimmedNote = (note || "").trim().slice(0, 280);
+    try {
+        await db.collection("elders").doc(elderId).set({ careNote: trimmedNote || null }, { merge: true });
+        return { success: true, saved: !!trimmedNote };
+    }
+    catch (err) {
+        throw new https_1.HttpsError("internal", err.message || "Failed to save care note");
     }
 });
 //# sourceMappingURL=index.js.map

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "687305559829",
+    "project_id": "sahayam-33cd4",
+    "storage_bucket": "sahayam-33cd4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:687305559829:android:fb4349224ed482e953231c",
+        "android_client_info": {
+          "package_name": "com.sahayam.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAkeHb3hBAQ2AdfUWnw9b05tXdK_Pyul70"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

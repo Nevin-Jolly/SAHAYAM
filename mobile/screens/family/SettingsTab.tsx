@@ -7,69 +7,49 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
-  Switch,
 } from "react-native";
-import { BASE_URL, API, roleHeaders } from "../../constants/api";
+import { callSetCareNote } from "../../constants/api";
 
 /**
  * SettingsTab — Family Dashboard, Tab 4
- * Phase 5: Configuration UI for elder ID, check-in schedule, and app info.
+ * Phase 7: Social Bridging — family sends a care note to the elder via SAHAYAM.
  *
- * Phase 6 will add role-based access control. For now this tab exposes:
- *   - Current elder_id in use (editable for demo purposes)
- *   - Check-in schedule setup: POST /checkins/schedule
- *   - Current backend URL info (reminder to update ngrok URL)
+ * Provides:
+ *   - Elder ID configuration (identifies whose data the dashboard shows)
+ *   - Morning Care Note (social bridging): family writes a short message that
+ *     SAHAYAM speaks naturally during the elder's next conversation.
  *   - Privacy reminder (conversation history is elder-private)
- *
- * Note: Elder/family relationship and auth will be properly scoped in Phase 6.
  */
 
-const CRON_OPTIONS = [
-  { label: "Once daily — 10 AM", value: "0 10 * * *" },
-  { label: "Once daily — 3 PM", value: "0 15 * * *" },
-  { label: "Twice daily — 10 AM & 6 PM", value: "0 10,18 * * *" },
-  { label: "Every 4 hours (9a-9p)", value: "0 9,13,17,21 * * *" },
-];
 
 export default function SettingsTab() {
   const [elderId, setElderId] = useState("elder_demo_001");
-  const [elderFcmToken, setElderFcmToken] = useState("");
-  const [familyFcmToken, setFamilyFcmToken] = useState("");
-  const [selectedCron, setSelectedCron] = useState("0 10 * * *");
-  const [scheduleSaving, setScheduleSaving] = useState(false);
-  const [scheduleResult, setScheduleResult] = useState<string | null>(null);
+  const [careNote, setCareNote] = useState("");
+  const [careNoteSaving, setCareNoteSaving] = useState(false);
+  const [careNoteResult, setCareNoteResult] = useState<string | null>(null);
 
-  const handleScheduleCheckin = async () => {
+  const handleSaveCareNote = async () => {
     if (!elderId.trim()) {
-      Alert.alert("Required", "Elder ID is required.");
+      Alert.alert("Required", "Elder ID must be set first.");
       return;
     }
-    if (!elderFcmToken.trim()) {
-      Alert.alert("Required", "Elder FCM token is required to send check-in notifications.");
-      return;
-    }
-    setScheduleSaving(true);
-    setScheduleResult(null);
+    setCareNoteSaving(true);
+    setCareNoteResult(null);
     try {
-      const res = await fetch(`${API.checkins}/schedule`, {
-        method: "POST",
-        headers: roleHeaders("family"),
-        body: JSON.stringify({
-          elder_id: elderId.trim(),
-          cron_expr: selectedCron,
-          fcm_token: elderFcmToken.trim(),
-          family_fcm_token: familyFcmToken.trim() || null,
-        }),
+      const result = await callSetCareNote({
+        elderId: elderId.trim(),
+        note: careNote.trim(),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || `Server error ${res.status}`);
-      setScheduleResult(
-        `✓ Check-in scheduled (${CRON_OPTIONS.find((o) => o.value === selectedCron)?.label}).`
-      );
+      if (result.data.saved) {
+        setCareNoteResult("✓ Care note saved. SAHAYAM will share it with the elder in the next conversation.");
+      } else {
+        setCareNoteResult("✓ Care note cleared.");
+        setCareNote("");
+      }
     } catch (e: any) {
-      Alert.alert("Error", e.message || "Failed to schedule check-in.");
+      Alert.alert("Error", e.message || "Failed to save care note.");
     } finally {
-      setScheduleSaving(false);
+      setCareNoteSaving(false);
     }
   };
 
@@ -93,93 +73,47 @@ export default function SettingsTab() {
           accessibilityLabel="Elder ID input"
         />
         <Text style={styles.inputHint}>
-          This identifies whose data is shown in the dashboard. Proper auth will be
-          linked in Phase 6.
+          This identifies whose data is shown in the dashboard.
         </Text>
       </View>
 
-      {/* ── Check-in Schedule ─────────────────────────────────────────────────── */}
+      {/* ── Phase 7: Morning Care Note (Social Bridging) ──────────────── */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Proactive Check-in Schedule</Text>
-        <Text style={styles.inputLabel}>Elder Device FCM Token *</Text>
-        <TextInput
-          style={styles.input}
-          value={elderFcmToken}
-          onChangeText={setElderFcmToken}
-          placeholder="Paste elder device token"
-          placeholderTextColor="#4B5563"
-          autoCapitalize="none"
-          multiline
-          accessibilityLabel="Elder FCM token input"
-        />
-        <Text style={styles.inputLabel}>Family Device FCM Token (optional)</Text>
-        <TextInput
-          style={styles.input}
-          value={familyFcmToken}
-          onChangeText={setFamilyFcmToken}
-          placeholder="Paste family device token"
-          placeholderTextColor="#4B5563"
-          autoCapitalize="none"
-          multiline
-          accessibilityLabel="Family FCM token input"
-        />
-        <Text style={styles.inputLabel}>Check-in Frequency</Text>
-        <View style={styles.cronOptions}>
-          {CRON_OPTIONS.map((opt) => (
-            <TouchableOpacity
-              key={opt.value}
-              style={[
-                styles.cronOption,
-                selectedCron === opt.value && styles.cronOptionSelected,
-              ]}
-              onPress={() => setSelectedCron(opt.value)}
-              accessibilityLabel={`Select schedule: ${opt.label}`}
-            >
-              <Text
-                style={[
-                  styles.cronOptionText,
-                  selectedCron === opt.value && styles.cronOptionTextSelected,
-                ]}
-              >
-                {opt.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <Text style={styles.infoSmall}>
-          Escalation fires 30 minutes after a check-in goes unanswered.
+        <Text style={styles.sectionTitle}>💛 മാത്സര്യ സന്ദേശം — Care Note</Text>
+        <Text style={styles.careNoteDesc}>
+          Write a short message for your elder. SAHAYAM will deliver it naturally
+          during the next conversation — like a warm voice from the family.
         </Text>
-
+        <TextInput
+          style={[styles.input, styles.careNoteInput]}
+          value={careNote}
+          onChangeText={(t) => {
+            setCareNote(t);
+            setCareNoteResult(null);
+          }}
+          placeholder="e.g. കുടുംബം സ്നേഹമുൾളള വാക്കുകൾ അരുളുന്നു..."
+          placeholderTextColor="#4B5563"
+          multiline
+          maxLength={280}
+          accessibilityLabel="Morning care note input"
+        />
+        <Text style={styles.charCount}>{careNote.length}/280</Text>
         <TouchableOpacity
-          style={[styles.primaryBtn, scheduleSaving && styles.primaryBtnDisabled]}
-          onPress={handleScheduleCheckin}
-          disabled={scheduleSaving}
-          accessibilityLabel="Save check-in schedule"
+          style={[styles.primaryBtn, styles.careNoteBtn, careNoteSaving && styles.primaryBtnDisabled]}
+          onPress={handleSaveCareNote}
+          disabled={careNoteSaving}
+          accessibilityLabel="Send care note to elder"
         >
           <Text style={styles.primaryBtnText}>
-            {scheduleSaving ? "Saving…" : "Save Check-in Schedule"}
+            {careNoteSaving ? "അയക്കുന്നു…" : "💚 Send to Elder via SAHAYAM"}
           </Text>
         </TouchableOpacity>
-
-        {scheduleResult && (
-          <Text style={styles.successText}>{scheduleResult}</Text>
+        {careNoteResult && (
+          <Text style={styles.successText}>{careNoteResult}</Text>
         )}
       </View>
 
-      {/* ── Backend Connection ────────────────────────────────────────────────── */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Backend Connection</Text>
-        <View style={styles.infoCard}>
-          <Text style={styles.infoLabel}>Current API URL</Text>
-          <Text style={styles.infoValue} selectable>
-            {BASE_URL}
-          </Text>
-          <Text style={styles.infoHint}>
-            Update BASE_URL in constants/api.ts each time ngrok restarts.
-          </Text>
-        </View>
-      </View>
+
 
       {/* ── Privacy ───────────────────────────────────────────────────────────── */}
       <View style={styles.section}>
@@ -209,7 +143,7 @@ export default function SettingsTab() {
             Malayalam-native voice companion for elderly care.{"\n"}
             KTU B.Tech CSD415 Capstone · Group 9
           </Text>
-          <Text style={styles.aboutVersion}>Backend v0.5.0 · Phase 5</Text>
+          <Text style={styles.aboutVersion}>Phase 7 · Social Bridging &amp; Local Awareness</Text>
         </View>
       </View>
     </ScrollView>
@@ -231,6 +165,26 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#1F2937",
     paddingBottom: 8,
+  },
+  careNoteDesc: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  careNoteInput: {
+    minHeight: 90,
+    textAlignVertical: "top",
+    marginBottom: 2,
+  },
+  careNoteBtn: {
+    backgroundColor: "#059669",
+  },
+  charCount: {
+    fontSize: 11,
+    color: "#4B5563",
+    textAlign: "right",
+    marginBottom: 12,
   },
   inputLabel: { fontSize: 12, fontWeight: "600", color: "#9CA3AF", marginBottom: 6 },
   input: {

@@ -32,6 +32,11 @@ export const callTriggerEmergencyEscalation = httpsCallable<
   { success: boolean; escalationId: string }
 >(functions, "triggerEmergencyEscalation");
 
+export const callSetCareNote = httpsCallable<
+  { elderId: string; note: string },
+  { success: boolean; saved: boolean }
+>(functions, "setCareNote");
+
 /**
  * REST / HTTP API endpoints
  */
