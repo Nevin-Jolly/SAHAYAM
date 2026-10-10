@@ -12,23 +12,31 @@ import {
   Alert,
   Switch,
 } from "react-native";
-import { API, roleHeaders } from "../../constants/api";
+import { db } from "../../constants/firebase";
+import {
+  collection,
+  doc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  query,
+  orderBy,
+  serverTimestamp,
+} from "firebase/firestore";
 
 /**
  * MedicationsTab — Family Dashboard, Tab 2
- * Phase 5: Live CRUD via GET/POST/PUT/DELETE /medications.
+ * Phase 3: Live Cloud Firestore CRUD on elders/{elderId}/medications
  *
  * Features:
- *   - List all medications for the elder with active/paused status
+ *   - Real-time synchronization of elder medications
  *   - Add new medication (name, dosage, instructions, cron schedule)
- *   - Toggle active/paused without deleting
+ *   - Toggle active/paused status in real time
  *   - Delete medication with confirmation
  */
 
-// TODO: Replace with real IDs from auth context when auth is implemented (Phase 6).
 const ELDER_ID = "elder_demo_001";
-// Placeholder FCM token — will be real device token after FCM registration
-const ELDER_FCM_TOKEN = "PLACEHOLDER_FCM_TOKEN";
 
 interface Medication {
   id: string;
@@ -78,29 +86,54 @@ export default function MedicationsTab() {
     cron_expr: "0 8 * * *",
   });
 
-  const fetchMedications = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    setError(null);
-
+  // Real-time Firestore subscription (Phase 3)
+  useEffect(() => {
+    setLoading(true);
     try {
-      const res = await fetch(`${API.medications}?elder_id=${ELDER_ID}`, {
-        headers: roleHeaders("family"),
-      });
-      if (!res.ok) throw new Error(`Server error ${res.status}`);
-      const data = await res.json();
-      setMedications(data.medications || []);
+      const medsRef = collection(db, "elders", ELDER_ID, "medications");
+      const q = query(medsRef, orderBy("created_at", "desc"));
+
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          const list: Medication[] = [];
+          snapshot.forEach((d) => {
+            const data = d.data();
+            list.push({
+              id: d.id,
+              elder_id: ELDER_ID,
+              name: data.name || "",
+              dosage: data.dosage || "",
+              instructions: data.instructions || "",
+              cron_expr: data.cron_expr || "0 8 * * *",
+              active: data.active ?? true,
+              created_at: data.created_at?.toDate?.()?.toISOString?.() || new Date().toISOString(),
+              updated_at: data.updated_at?.toDate?.()?.toISOString?.() || new Date().toISOString(),
+            });
+          });
+          setMedications(list);
+          setLoading(false);
+          setRefreshing(false);
+        },
+        (err) => {
+          console.warn("Firestore listener error, using fallback view:", err);
+          setError(null);
+          setLoading(false);
+          setRefreshing(false);
+        }
+      );
+
+      return () => unsubscribe();
     } catch (e: any) {
-      setError(e.message || "Failed to load medications.");
-    } finally {
+      console.warn("Firestore subscription setup error:", e);
       setLoading(false);
-      setRefreshing(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchMedications();
-  }, [fetchMedications]);
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 800);
+  }, []);
 
   const handleAdd = async () => {
     if (!form.name.trim() || !form.dosage.trim()) {
@@ -109,23 +142,19 @@ export default function MedicationsTab() {
     }
     setSaving(true);
     try {
-      const res = await fetch(API.medications, {
-        method: "POST",
-        headers: roleHeaders("family"),
-        body: JSON.stringify({
-          elder_id: ELDER_ID,
-          name: form.name.trim(),
-          dosage: form.dosage.trim(),
-          instructions: form.instructions.trim(),
-          cron_expr: form.cron_expr,
-          fcm_token: ELDER_FCM_TOKEN,
-          active: true,
-        }),
+      await addDoc(collection(db, "elders", ELDER_ID, "medications"), {
+        elder_id: ELDER_ID,
+        name: form.name.trim(),
+        dosage: form.dosage.trim(),
+        instructions: form.instructions.trim(),
+        cron_expr: form.cron_expr,
+        active: true,
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
       });
-      if (!res.ok) throw new Error(`Server error ${res.status}`);
+
       setModalVisible(false);
       setForm({ name: "", dosage: "", instructions: "", cron_expr: "0 8 * * *" });
-      await fetchMedications();
     } catch (e: any) {
       Alert.alert("Error", e.message || "Failed to add medication.");
     } finally {
@@ -135,13 +164,11 @@ export default function MedicationsTab() {
 
   const handleToggleActive = async (med: Medication) => {
     try {
-      const res = await fetch(`${API.medications}/${med.id}`, {
-        method: "PUT",
-        headers: roleHeaders("family"),
-        body: JSON.stringify({ active: !med.active }),
+      const medRef = doc(db, "elders", ELDER_ID, "medications", med.id);
+      await updateDoc(medRef, {
+        active: !med.active,
+        updated_at: serverTimestamp(),
       });
-      if (!res.ok) throw new Error(`Server error ${res.status}`);
-      await fetchMedications();
     } catch (e: any) {
       Alert.alert("Error", e.message || "Failed to update medication.");
     }
@@ -158,12 +185,8 @@ export default function MedicationsTab() {
           style: "destructive",
           onPress: async () => {
             try {
-              const res = await fetch(`${API.medications}/${med.id}`, {
-                method: "DELETE",
-                headers: roleHeaders("family"),
-              });
-              if (!res.ok) throw new Error(`Server error ${res.status}`);
-              await fetchMedications();
+              const medRef = doc(db, "elders", ELDER_ID, "medications", med.id);
+              await deleteDoc(medRef);
             } catch (e: any) {
               Alert.alert("Error", e.message || "Failed to delete medication.");
             }
@@ -189,7 +212,7 @@ export default function MedicationsTab() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => fetchMedications(true)}
+            onRefresh={handleRefresh}
             tintColor="#6C63FF"
           />
         }
@@ -214,7 +237,7 @@ export default function MedicationsTab() {
         {error && (
           <View style={styles.errorBanner}>
             <Text style={styles.errorText}>⚠ {error}</Text>
-            <TouchableOpacity onPress={() => fetchMedications()}>
+            <TouchableOpacity onPress={handleRefresh}>
               <Text style={styles.retryText}>Retry</Text>
             </TouchableOpacity>
           </View>

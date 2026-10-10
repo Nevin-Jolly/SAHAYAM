@@ -464,3 +464,122 @@ export const checkInEscalationMonitor = onSchedule(
     }
   }
 );
+
+/**
+ * Callable Function: scheduleProactiveCheckIn (Phase 3)
+ * Creates a scheduled check-in event for an elder.
+ */
+export const scheduleProactiveCheckIn = onCall(
+  { cors: true },
+  async (request) => {
+    const { elderId, promptNote } = request.data as {
+      elderId: string;
+      promptNote?: string;
+    };
+
+    if (!elderId) {
+      throw new HttpsError("invalid-argument", "elderId is required");
+    }
+
+    try {
+      const checkinRef = await db
+        .collection("elders")
+        .doc(elderId)
+        .collection("checkins")
+        .add({
+          elderId,
+          scheduledTime: admin.firestore.FieldValue.serverTimestamp(),
+          status: "pending",
+          escalationTriggered: false,
+          promptNote: promptNote || "സുഖമാണോ? എന്തെങ്കിലും സഹായം ആവശ്യമുണ്ടോ?",
+        });
+
+      return {
+        success: true,
+        checkinId: checkinRef.id,
+        status: "pending",
+      };
+    } catch (err: any) {
+      throw new HttpsError("internal", err.message || "Failed to schedule check-in");
+    }
+  }
+);
+
+/**
+ * Callable Function: recordCheckInOutcome (Phase 3)
+ * Records elder's response to a pending check-in.
+ */
+export const recordCheckInOutcome = onCall(
+  { cors: true },
+  async (request) => {
+    const { elderId, checkinId, moodNote } = request.data as {
+      elderId: string;
+      checkinId: string;
+      moodNote?: string;
+    };
+
+    if (!elderId || !checkinId) {
+      throw new HttpsError("invalid-argument", "elderId and checkinId are required");
+    }
+
+    try {
+      const checkinRef = db
+        .collection("elders")
+        .doc(elderId)
+        .collection("checkins")
+        .doc(checkinId);
+
+      await checkinRef.update({
+        status: "answered",
+        answeredAt: admin.firestore.FieldValue.serverTimestamp(),
+        moodNote: moodNote || "നല്ലത്",
+      });
+
+      return {
+        success: true,
+        checkinId,
+        status: "answered",
+      };
+    } catch (err: any) {
+      throw new HttpsError("internal", err.message || "Failed to record check-in response");
+    }
+  }
+);
+
+/**
+ * Scheduled Function: medicationReminderScheduler (Phase 3)
+ * Runs hourly to scan active medications and deliver dose reminders.
+ */
+export const medicationReminderScheduler = onSchedule(
+  "0 * * * *",
+  async () => {
+    const activeMedsSnapshot = await db
+      .collectionGroup("medications")
+      .where("active", "==", true)
+      .get();
+
+    for (const doc of activeMedsSnapshot.docs) {
+      const medData = doc.data();
+      const elderId = doc.ref.parent.parent?.id;
+      if (!elderId) continue;
+
+      // Send reminder to elder device if token exists
+      const elderUserDoc = await db.collection("users").doc(elderId).get();
+      const fcmToken = elderUserDoc.data()?.fcmToken;
+
+      if (fcmToken) {
+        await admin.messaging().send({
+          token: fcmToken,
+          notification: {
+            title: `💊 മരുന്ന് കഴിക്കാൻ സമയമായി: ${medData.name}`,
+            body: `അളവ്: ${medData.dosage}. ${medData.instructions || ""}`,
+          },
+          data: {
+            type: "MEDICATION_REMINDER",
+            medicationId: doc.id,
+          },
+        });
+      }
+    }
+  }
+);

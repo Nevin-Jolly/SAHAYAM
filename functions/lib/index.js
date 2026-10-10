@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.checkInEscalationMonitor = exports.triggerEmergencyEscalation = exports.queryElderMemories = exports.storeElderMemory = exports.respondCompanionVoice = void 0;
+exports.medicationReminderScheduler = exports.recordCheckInOutcome = exports.scheduleProactiveCheckIn = exports.checkInEscalationMonitor = exports.triggerEmergencyEscalation = exports.queryElderMemories = exports.storeElderMemory = exports.respondCompanionVoice = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const params_1 = require("firebase-functions/params");
@@ -417,6 +417,99 @@ exports.checkInEscalationMonitor = (0, scheduler_1.onSchedule)("every 15 minutes
                 data: {
                     elderId,
                     type: "UNANSWERED_CHECKIN",
+                },
+            });
+        }
+    }
+});
+/**
+ * Callable Function: scheduleProactiveCheckIn (Phase 3)
+ * Creates a scheduled check-in event for an elder.
+ */
+exports.scheduleProactiveCheckIn = (0, https_1.onCall)({ cors: true }, async (request) => {
+    const { elderId, promptNote } = request.data;
+    if (!elderId) {
+        throw new https_1.HttpsError("invalid-argument", "elderId is required");
+    }
+    try {
+        const checkinRef = await db
+            .collection("elders")
+            .doc(elderId)
+            .collection("checkins")
+            .add({
+            elderId,
+            scheduledTime: admin.firestore.FieldValue.serverTimestamp(),
+            status: "pending",
+            escalationTriggered: false,
+            promptNote: promptNote || "സുഖമാണോ? എന്തെങ്കിലും സഹായം ആവശ്യമുണ്ടോ?",
+        });
+        return {
+            success: true,
+            checkinId: checkinRef.id,
+            status: "pending",
+        };
+    }
+    catch (err) {
+        throw new https_1.HttpsError("internal", err.message || "Failed to schedule check-in");
+    }
+});
+/**
+ * Callable Function: recordCheckInOutcome (Phase 3)
+ * Records elder's response to a pending check-in.
+ */
+exports.recordCheckInOutcome = (0, https_1.onCall)({ cors: true }, async (request) => {
+    const { elderId, checkinId, moodNote } = request.data;
+    if (!elderId || !checkinId) {
+        throw new https_1.HttpsError("invalid-argument", "elderId and checkinId are required");
+    }
+    try {
+        const checkinRef = db
+            .collection("elders")
+            .doc(elderId)
+            .collection("checkins")
+            .doc(checkinId);
+        await checkinRef.update({
+            status: "answered",
+            answeredAt: admin.firestore.FieldValue.serverTimestamp(),
+            moodNote: moodNote || "നല്ലത്",
+        });
+        return {
+            success: true,
+            checkinId,
+            status: "answered",
+        };
+    }
+    catch (err) {
+        throw new https_1.HttpsError("internal", err.message || "Failed to record check-in response");
+    }
+});
+/**
+ * Scheduled Function: medicationReminderScheduler (Phase 3)
+ * Runs hourly to scan active medications and deliver dose reminders.
+ */
+exports.medicationReminderScheduler = (0, scheduler_1.onSchedule)("0 * * * *", async () => {
+    const activeMedsSnapshot = await db
+        .collectionGroup("medications")
+        .where("active", "==", true)
+        .get();
+    for (const doc of activeMedsSnapshot.docs) {
+        const medData = doc.data();
+        const elderId = doc.ref.parent.parent?.id;
+        if (!elderId)
+            continue;
+        // Send reminder to elder device if token exists
+        const elderUserDoc = await db.collection("users").doc(elderId).get();
+        const fcmToken = elderUserDoc.data()?.fcmToken;
+        if (fcmToken) {
+            await admin.messaging().send({
+                token: fcmToken,
+                notification: {
+                    title: `💊 മരുന്ന് കഴിക്കാൻ സമയമായി: ${medData.name}`,
+                    body: `അളവ്: ${medData.dosage}. ${medData.instructions || ""}`,
+                },
+                data: {
+                    type: "MEDICATION_REMINDER",
+                    medicationId: doc.id,
                 },
             });
         }
