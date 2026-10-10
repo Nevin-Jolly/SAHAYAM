@@ -28,6 +28,7 @@ import {
   callRespondCompanionVoice,
   callTriggerEmergencyEscalation,
 } from "../../constants/api";
+import { useRole } from "../../navigation/RootNavigator";
 
 const { width } = Dimensions.get("window");
 const MIC_SIZE = width * 0.52;
@@ -73,6 +74,7 @@ export default function ElderHomeScreen() {
   const [lastResponse, setLastResponse] = useState<string>("");
   const [fallbackText, setFallbackText] = useState("");
   const [showFallback, setShowFallback] = useState(false);
+  const { logout } = useRole();
 
   // Recorder is created lazily inside startRecording() to avoid
   // "AudioRecorder.constructor rejected: activity not available" on mount.
@@ -203,18 +205,61 @@ export default function ElderHomeScreen() {
 
   async function processVoiceUri(uri: string) {
     try {
-      // In mobile environment, prompt fallback or process speech
-      // If native transcription is unavailable on device, surface text fallback
+      setAppState("thinking");
+      setStatusText("ചിന്തിക്കുന്നു...");
+      setStatusTextEn("(Listening and thinking...)");
+
+      // Read recorded audio file as base64
+      let audioBase64: string | undefined;
+      try {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        audioBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const res = reader.result as string;
+            const b64 = res.includes(",") ? res.split(",")[1] : res;
+            resolve(b64);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } catch (readErr) {
+        console.warn("Could not read local audio as base64:", readErr);
+      }
+
+      if (audioBase64) {
+        const result = await callRespondCompanionVoice({
+          elderId: DEMO_ELDER_ID,
+          audioBase64,
+        });
+
+        const responseData = result.data;
+        if (responseData.success && responseData.response) {
+          setLastResponse(responseData.response);
+          if (responseData.audioUri) {
+            await playSynthesizedAudio(responseData.audioUri);
+            return;
+          } else {
+            setAppState("idle");
+            setStatusText("സംസാരിക്കാൻ ഇവിടെ അമർത്തുക");
+            setStatusTextEn("(Tap to speak)");
+            return;
+          }
+        }
+      }
+
+      // If audio processing yielded no speech, open fallback text input
       setShowFallback(true);
       setAppState("fallback_input");
       setStatusText("ടൈപ്പ് ചെയ്ത് അയക്കൂ");
-      setStatusTextEn("(Couldn't transcribe clearly — please type below)");
+      setStatusTextEn("(Tap below to type your message)");
     } catch (e: any) {
-      console.error("Transcription error:", e);
+      console.error("Voice processing error:", e);
       setShowFallback(true);
       setAppState("fallback_input");
       setStatusText("ടൈപ്പ് ചെയ്ത് അയക്കൂ");
-      setStatusTextEn("(Please type your message)");
+      setStatusTextEn("(Please type your message below)");
     }
   }
 
@@ -365,6 +410,17 @@ export default function ElderHomeScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <StatusBar barStyle="light-content" backgroundColor="#0D0D1A" />
+
+        {/* Top header with Switch Role */}
+        <View style={styles.topBar}>
+          <TouchableOpacity
+            style={styles.switchRoleBtn}
+            onPress={logout}
+            accessibilityLabel="Switch Role"
+          >
+            <Text style={styles.switchRoleBtnText}>🔄 റോൾ മാറ്റുക (Switch Role)</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* App name in Malayalam script */}
         <Text style={styles.brandMalayalam}>സഹായം</Text>
@@ -594,5 +650,24 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "800",
     letterSpacing: 0.5,
+  },
+  topBar: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginBottom: 8,
+  },
+  switchRoleBtn: {
+    backgroundColor: "#1A1A2E",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2A2A4A",
+  },
+  switchRoleBtnText: {
+    color: "#9CA3AF",
+    fontSize: 12,
+    fontWeight: "600",
   },
 });

@@ -258,9 +258,25 @@ export const respondCompanionVoice = onCall(
             (memoryContext ? `\n   മുൻകാല ഓർമ്മകൾ: ${memoryContext}` : "") +
             careNoteBlock;
 
+          const userParts: any[] = [];
+          if (data.audioBase64) {
+            const rawBase64 = data.audioBase64.replace(/^data:audio\/[a-z0-9]+;base64,/, "");
+            userParts.push({
+              inlineData: {
+                mimeType: "audio/mp4",
+                data: rawBase64,
+              },
+            });
+            userParts.push({
+              text: "പ്രായമായ ആളുടെ ശബ്ദം കേട്ട്, സ്നേഹത്തോടെയും ബഹുമാനത്തോടെയും സ്വാഭാവിക മലയാളത്തിൽ 1 അല്ലെങ്കിൽ 2 വാക്യങ്ങളിൽ മാത്രം മറുപടി നൽകുക.",
+            });
+          } else {
+            userParts.push({ text: userPrompt });
+          }
+
           const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
           const requestPayload = {
-            contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+            contents: [{ role: "user", parts: userParts }],
             systemInstruction: { parts: [{ text: systemInstruction }] },
             generationConfig: { temperature: 0.7, maxOutputTokens: 100 },
           };

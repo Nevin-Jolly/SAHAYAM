@@ -9,29 +9,38 @@ import {
   RefreshControl,
   Alert,
 } from "react-native";
-import { API, roleHeaders } from "../../constants/api";
+import { db } from "../../constants/firebase";
+import {
+  collection,
+  query,
+  orderBy,
+  limit,
+  onSnapshot,
+  doc,
+  updateDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 
 /**
  * CheckinsTab — Family Dashboard, Tab 3
- * Phase 5: Live data from GET /checkins and GET /escalations.
- *          Resolve action via PUT /escalations/{id}/resolve.
+ * Phase 4 & 5: Live Cloud Firestore check-in history & escalation management.
  *
- * Shows check-ins and escalations in a combined, scrollable view with
- * two sections — Escalations (top, most urgent) and Check-in History.
- * Escalation threshold: 30 minutes no response → auto-escalate (Phase 4 scheduler).
+ * Realtime sync:
+ *   - Proactive check-in log from elders/{elderId}/checkins
+ *   - Escalation alerts from elders/{elderId}/escalations
+ *   - Direct resolution action updates Firestore document
  */
 
-// TODO: Replace with real IDs from auth context when auth is implemented (Phase 6).
 const ELDER_ID = "elder_demo_001";
 
 interface Checkin {
   id: string;
   elder_id: string;
-  timestamp: string;
-  responded_at: string | null;
   status: "answered" | "unanswered" | "pending";
+  timestamp: string;
+  responded_at?: string | null;
+  notes?: string | null;
   escalation_triggered: boolean;
-  notes: string;
 }
 
 interface Escalation {
@@ -39,12 +48,39 @@ interface Escalation {
   elder_id: string;
   reason: string;
   triggered_at: string;
-  family_notified: boolean;
   resolved: boolean;
-  resolved_at: string | null;
+  resolved_at?: string | null;
+  family_notified: boolean;
+  notes?: string | null;
 }
 
-function formatTime(iso: string | null | undefined): string {
+function checkinStatusColor(status: Checkin["status"]): string {
+  switch (status) {
+    case "answered":
+      return "#10B981";
+    case "unanswered":
+      return "#EF4444";
+    case "pending":
+      return "#F59E0B";
+    default:
+      return "#6B7280";
+  }
+}
+
+function checkinStatusIcon(status: Checkin["status"]): string {
+  switch (status) {
+    case "answered":
+      return "✓";
+    case "unanswered":
+      return "✗";
+    case "pending":
+      return "⏳";
+    default:
+      return "•";
+  }
+}
+
+function formatTime(iso?: string | null): string {
   if (!iso) return "—";
   try {
     const d = new Date(iso);
@@ -60,66 +96,95 @@ function formatTime(iso: string | null | undefined): string {
   }
 }
 
-function checkinStatusColor(status: Checkin["status"]): string {
-  switch (status) {
-    case "answered":  return "#10B981";
-    case "unanswered": return "#EF4444";
-    case "pending":   return "#F59E0B";
-    default:          return "#6B7280";
-  }
-}
-
-function checkinStatusIcon(status: Checkin["status"]): string {
-  switch (status) {
-    case "answered":  return "✓";
-    case "unanswered": return "✗";
-    case "pending":   return "⏳";
-    default:          return "?";
-  }
-}
-
 export default function CheckinsTab() {
   const [checkins, setCheckins] = useState<Checkin[]>([]);
   const [escalations, setEscalations] = useState<Escalation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
 
-  const fetchData = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    setError(null);
+  useEffect(() => {
+    setLoading(true);
 
-    try {
-      const [checkinsRes, escalationsRes] = await Promise.all([
-        fetch(`${API.checkins}?elder_id=${ELDER_ID}&limit=20`, {
-          headers: roleHeaders("family"),
-        }),
-        fetch(`${API.escalations}?elder_id=${ELDER_ID}&limit=20`, {
-          headers: roleHeaders("family"),
-        }),
-      ]);
+    // 1. Subscribe to Check-ins
+    const checkinsRef = collection(db, "elders", ELDER_ID, "checkins");
+    const checkinsQuery = query(checkinsRef, orderBy("scheduledTime", "desc"), limit(20));
+    const unsubCheckins = onSnapshot(
+      checkinsQuery,
+      (snap) => {
+        const list: Checkin[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          const scheduledIso =
+            data.scheduledTime?.toDate?.()?.toISOString?.() ||
+            (typeof data.scheduledTime === "string" ? data.scheduledTime : new Date().toISOString());
+          const answeredIso =
+            data.answeredAt?.toDate?.()?.toISOString?.() ||
+            (typeof data.answeredAt === "string" ? data.answeredAt : null);
 
-      if (!checkinsRes.ok) throw new Error(`Check-ins error ${checkinsRes.status}`);
-      if (!escalationsRes.ok) throw new Error(`Escalations error ${escalationsRes.status}`);
+          list.push({
+            id: d.id,
+            elder_id: ELDER_ID,
+            status: data.status || "answered",
+            timestamp: scheduledIso,
+            responded_at: answeredIso,
+            notes: data.moodNote || data.promptNote || null,
+            escalation_triggered: !!data.escalationTriggered,
+          });
+        });
+        setCheckins(list);
+        setLoading(false);
+        setRefreshing(false);
+      },
+      (err) => {
+        console.warn("Checkins listener notice:", err);
+        setLoading(false);
+        setRefreshing(false);
+      }
+    );
 
-      const checkinsData = await checkinsRes.json();
-      const escalationsData = await escalationsRes.json();
+    // 2. Subscribe to Escalations
+    const escRef = collection(db, "elders", ELDER_ID, "escalations");
+    const escQuery = query(escRef, orderBy("triggeredAt", "desc"), limit(20));
+    const unsubEsc = onSnapshot(
+      escQuery,
+      (snap) => {
+        const list: Escalation[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          const triggeredIso =
+            data.triggeredAt?.toDate?.()?.toISOString?.() ||
+            (typeof data.triggeredAt === "string" ? data.triggeredAt : new Date().toISOString());
+          const resolvedIso =
+            data.resolvedAt?.toDate?.()?.toISOString?.() ||
+            (typeof data.resolvedAt === "string" ? data.resolvedAt : null);
 
-      setCheckins(checkinsData.checkins || []);
-      setEscalations(escalationsData.escalations || []);
-    } catch (e: any) {
-      setError(e.message || "Failed to load data.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+          list.push({
+            id: d.id,
+            elder_id: ELDER_ID,
+            reason: data.reason || "unanswered_checkin",
+            triggered_at: triggeredIso,
+            resolved: !!data.resolved,
+            resolved_at: resolvedIso,
+            family_notified: !!data.familyNotified,
+            notes: data.notes || null,
+          });
+        });
+        setEscalations(list);
+      },
+      (err) => console.warn("Escalations listener notice:", err)
+    );
+
+    return () => {
+      unsubCheckins();
+      unsubEsc();
+    };
   }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 600);
+  }, []);
 
   const handleResolve = async (escalation: Escalation) => {
     Alert.alert(
@@ -132,12 +197,12 @@ export default function CheckinsTab() {
           onPress: async () => {
             setResolvingId(escalation.id);
             try {
-              const res = await fetch(
-                `${API.escalations}/${escalation.id}/resolve`,
-                { method: "PUT", headers: roleHeaders("family") }
-              );
-              if (!res.ok) throw new Error(`Server error ${res.status}`);
-              await fetchData();
+              const docRef = doc(db, "elders", ELDER_ID, "escalations", escalation.id);
+              await updateDoc(docRef, {
+                resolved: true,
+                resolvedAt: serverTimestamp(),
+                resolvedBy: "family_user",
+              });
             } catch (e: any) {
               Alert.alert("Error", e.message || "Failed to resolve escalation.");
             } finally {
@@ -149,6 +214,9 @@ export default function CheckinsTab() {
     );
   };
 
+  const openEscalations = escalations.filter((e) => !e.resolved);
+  const resolvedEscalations = escalations.filter((e) => e.resolved);
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -158,16 +226,13 @@ export default function CheckinsTab() {
     );
   }
 
-  const openEscalations = escalations.filter((e) => !e.resolved);
-  const resolvedEscalations = escalations.filter((e) => e.resolved);
-
   return (
     <ScrollView
       contentContainerStyle={styles.container}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
-          onRefresh={() => fetchData(true)}
+          onRefresh={onRefresh}
           tintColor="#6C63FF"
         />
       }
@@ -184,15 +249,6 @@ export default function CheckinsTab() {
           </View>
         )}
       </View>
-
-      {error && (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>⚠ {error}</Text>
-          <TouchableOpacity onPress={() => fetchData()}>
-            <Text style={styles.retryText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      )}
 
       {/* ── Open Escalations ─────────────────────────────────────────────────── */}
       <Text style={styles.sectionTitle}>
@@ -212,6 +268,8 @@ export default function CheckinsTab() {
               <Text style={styles.escalationReason}>
                 {esc.reason === "unanswered_checkin"
                   ? "Missed Check-in"
+                  : esc.reason === "elder_sos"
+                  ? "Elder SOS Emergency"
                   : esc.reason === "manual"
                   ? "Manual Alert"
                   : esc.reason}
@@ -220,8 +278,9 @@ export default function CheckinsTab() {
                 Triggered: {formatTime(esc.triggered_at)}
               </Text>
               <Text style={styles.escalationNotified}>
-                Family notified: {esc.family_notified ? "Yes ✓" : "No"}
+                Family notified: {esc.family_notified ? "Yes ✓" : "Pending"}
               </Text>
+              {esc.notes ? <Text style={styles.notesText}>{esc.notes}</Text> : null}
             </View>
             <TouchableOpacity
               style={[
@@ -251,7 +310,11 @@ export default function CheckinsTab() {
           {resolvedEscalations.map((esc) => (
             <View key={esc.id} style={[styles.escalationCard, styles.resolvedCard]}>
               <Text style={styles.resolvedReason}>
-                {esc.reason === "unanswered_checkin" ? "Missed Check-in" : esc.reason}
+                {esc.reason === "unanswered_checkin"
+                  ? "Missed Check-in"
+                  : esc.reason === "elder_sos"
+                  ? "Elder SOS Emergency"
+                  : esc.reason}
               </Text>
               <Text style={styles.resolvedTime}>
                 {formatTime(esc.triggered_at)} → Resolved {formatTime(esc.resolved_at)}
@@ -266,7 +329,7 @@ export default function CheckinsTab() {
         📋 Check-in History ({checkins.length})
       </Text>
 
-      {checkins.length === 0 && !error && (
+      {checkins.length === 0 && (
         <View style={styles.emptyRow}>
           <Text style={styles.emptyText}>No check-ins recorded yet</Text>
         </View>
@@ -302,130 +365,183 @@ export default function CheckinsTab() {
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, backgroundColor: "#0D0D1A", padding: 20 },
+  container: {
+    flexGrow: 1,
+    backgroundColor: "#0D0D1A",
+    padding: 20,
+  },
   centered: {
     flex: 1,
     backgroundColor: "#0D0D1A",
     alignItems: "center",
     justifyContent: "center",
   },
-  loadingText: { color: "#9CA3AF", marginTop: 12, fontSize: 14 },
+  loadingText: {
+    color: "#9CA3AF",
+    marginTop: 12,
+    fontSize: 14,
+  },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
     marginBottom: 20,
   },
-  title: { fontSize: 28, fontWeight: "800", color: "#F9FAFB" },
-  subtitle: { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  title: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#F9FAFB",
+  },
+  subtitle: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 2,
+  },
   alertBadge: {
-    backgroundColor: "#7F1D1D",
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  alertBadgeText: { color: "#FCA5A5", fontSize: 12, fontWeight: "700" },
-  errorBanner: {
-    backgroundColor: "#2D1515",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    backgroundColor: "#EF444422",
+    borderColor: "#EF4444",
     borderWidth: 1,
-    borderColor: "#7F1D1D",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
   },
-  errorText: { color: "#FCA5A5", fontSize: 13, flex: 1 },
-  retryText: { color: "#6C63FF", fontSize: 13, fontWeight: "700", marginLeft: 8 },
+  alertBadgeText: {
+    color: "#EF4444",
+    fontSize: 12,
+    fontWeight: "700",
+  },
   sectionTitle: {
     fontSize: 14,
     fontWeight: "700",
     color: "#9CA3AF",
+    marginBottom: 10,
+    textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: 12,
   },
   emptyRow: {
     backgroundColor: "#1A1A2E",
     borderRadius: 12,
     padding: 16,
+    marginBottom: 12,
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#2A2A4A",
-    marginBottom: 8,
   },
-  emptyText: { color: "#6B7280", fontSize: 14 },
-  // Escalation cards
+  emptyText: {
+    color: "#6B7280",
+    fontSize: 14,
+  },
   escalationCard: {
-    backgroundColor: "#1F1015",
-    borderRadius: 16,
+    backgroundColor: "#1F1218",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#EF444444",
     padding: 16,
     marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "#7F1D1D",
   },
   resolvedCard: {
-    backgroundColor: "#111827",
-    borderColor: "#1F2937",
+    backgroundColor: "#131E17",
+    borderColor: "#10B98133",
   },
   escalationTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  escalationLeft: { flex: 1 },
+  escalationLeft: {
+    flex: 1,
+    marginRight: 12,
+  },
   escalationReason: {
+    color: "#EF4444",
     fontSize: 15,
     fontWeight: "700",
-    color: "#FCA5A5",
-    marginBottom: 4,
+    marginBottom: 2,
   },
-  escalationTime: { fontSize: 12, color: "#9CA3AF", marginBottom: 2 },
-  escalationNotified: { fontSize: 12, color: "#6B7280" },
+  resolvedReason: {
+    color: "#10B981",
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  escalationTime: {
+    color: "#9CA3AF",
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  resolvedTime: {
+    color: "#6B7280",
+    fontSize: 11,
+  },
+  escalationNotified: {
+    color: "#6B7280",
+    fontSize: 11,
+  },
+  notesText: {
+    color: "#D1D5DB",
+    fontSize: 12,
+    marginTop: 4,
+    fontStyle: "italic",
+  },
   resolveBtn: {
     backgroundColor: "#1A1A2E",
+    borderWidth: 1,
+    borderColor: "#6C63FF",
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: "#6C63FF",
-    marginLeft: 12,
-    minWidth: 70,
     alignItems: "center",
   },
-  resolveBtnDisabled: { opacity: 0.5 },
-  resolveBtnText: { color: "#6C63FF", fontSize: 13, fontWeight: "700" },
-  resolvedReason: { fontSize: 13, fontWeight: "600", color: "#6B7280", marginBottom: 2 },
-  resolvedTime: { fontSize: 11, color: "#4B5563" },
-  // Check-in rows
+  resolveBtnDisabled: {
+    opacity: 0.5,
+  },
+  resolveBtnText: {
+    color: "#6C63FF",
+    fontSize: 13,
+    fontWeight: "700",
+  },
   checkinRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 12,
     backgroundColor: "#1A1A2E",
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#2A2A4A",
+    padding: 14,
+    marginBottom: 8,
   },
   checkinDot: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
-    flexShrink: 0,
+    marginTop: 2,
   },
-  checkinDotIcon: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  checkinInfo: { flex: 1 },
-  checkinStatus: { fontSize: 15, fontWeight: "700", marginBottom: 2 },
-  checkinTime: { fontSize: 12, color: "#9CA3AF" },
-  checkinResponded: { fontSize: 11, color: "#6B7280", marginTop: 2 },
-  checkinNotes: {
+  checkinDotIcon: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  checkinInfo: {
+    flex: 1,
+  },
+  checkinStatus: {
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  checkinTime: {
+    color: "#9CA3AF",
+    fontSize: 12,
+  },
+  checkinResponded: {
+    color: "#10B981",
     fontSize: 11,
-    color: "#4B5563",
+    marginTop: 2,
+  },
+  checkinNotes: {
+    color: "#D1D5DB",
+    fontSize: 12,
     marginTop: 4,
-    fontStyle: "italic",
   },
 });

@@ -9,6 +9,7 @@ import {
   Alert,
 } from "react-native";
 import { callSetCareNote } from "../../constants/api";
+import { useRole } from "../../navigation/RootNavigator";
 
 /**
  * SettingsTab — Family Dashboard, Tab 4
@@ -27,6 +28,7 @@ export default function SettingsTab() {
   const [careNote, setCareNote] = useState("");
   const [careNoteSaving, setCareNoteSaving] = useState(false);
   const [careNoteResult, setCareNoteResult] = useState<string | null>(null);
+  const { logout } = useRole();
 
   const handleSaveCareNote = async () => {
     if (!elderId.trim()) {
@@ -132,6 +134,19 @@ export default function SettingsTab() {
             </Text>
           </View>
         </View>
+      </View>
+
+      {/* ── Session & Role Switch ─────────────────────────────────────────────── */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Session &amp; Role</Text>
+        <TouchableOpacity
+          style={styles.switchRoleCard}
+          onPress={logout}
+          accessibilityLabel="Switch Role or Log Out"
+        >
+          <Text style={styles.switchRoleCardText}>🔄 റോൾ മാറ്റുക / Switch Role</Text>
+          <Text style={styles.switchRoleCardSub}>Return to role selector (Elder / Family)</Text>
+        </TouchableOpacity>
       </View>
 
       {/* ── App Info ──────────────────────────────────────────────────────────── */}
@@ -274,4 +289,22 @@ const styles = StyleSheet.create({
   },
   aboutDesc: { fontSize: 13, color: "#9CA3AF", textAlign: "center", lineHeight: 20 },
   aboutVersion: { fontSize: 11, color: "#4B5563", marginTop: 8 },
+  switchRoleCard: {
+    backgroundColor: "#1F1D36",
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#6C63FF66",
+    alignItems: "center",
+  },
+  switchRoleCardText: {
+    color: "#A78BFA",
+    fontSize: 15,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  switchRoleCardSub: {
+    color: "#6B7280",
+    fontSize: 12,
+  },
 });
