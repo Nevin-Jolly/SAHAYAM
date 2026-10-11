@@ -28,7 +28,7 @@ import {
   respondCompanionVoiceDirect,
   triggerEmergencyEscalationDirect,
 } from "../../services/companionService";
-import { useRole } from "../../navigation/RootNavigator";
+import { useRole } from "../../context/RoleContext";
 
 const { width } = Dimensions.get("window");
 const MIC_SIZE = width * 0.52;

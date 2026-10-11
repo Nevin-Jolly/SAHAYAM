@@ -9,7 +9,7 @@ import {
   Alert,
 } from "react-native";
 import { setCareNoteDirect } from "../../services/companionService";
-import { useRole } from "../../navigation/RootNavigator";
+import { useRole } from "../../context/RoleContext";
 
 /**
  * SettingsTab — Family Dashboard, Tab 4

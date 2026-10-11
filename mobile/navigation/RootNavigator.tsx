@@ -1,23 +1,12 @@
-import React, { useState, createContext, useContext } from "react";
+import React, { useState } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import ElderHomeScreen from "../screens/elder/ElderHomeScreen";
 import FamilyTabNavigator from "./FamilyTabNavigator";
 import LoginScreen from "../screens/LoginScreen";
+import { Role, RoleContext, useRole, RoleContextType } from "../context/RoleContext";
 
-export type Role = "elder" | "family";
-
-export interface RoleContextType {
-  role: Role | null;
-  logout: () => void;
-}
-
-export const RoleContext = createContext<RoleContextType>({
-  role: null,
-  logout: () => {},
-});
-
-export const useRole = () => useContext(RoleContext);
+export { Role, RoleContext, useRole, RoleContextType };
 
 export type RootStackParamList = {
   Login: undefined;
