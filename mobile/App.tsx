@@ -1,7 +1,14 @@
 import "react-native-gesture-handler"; // Must be the first import
 import React from "react";
+import { LogBox } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import RootNavigator from "./navigation/RootNavigator";
+
+// Ignore benign React Native Blob and development warnings
+LogBox.ignoreLogs([
+  "Response.blob() is using React Native's Blob",
+  "Require cycle:",
+]);
 
 /**
  * SAHAYAM — App entry point

@@ -208,26 +208,7 @@ export default function ElderHomeScreen() {
       setStatusText("ചിന്തിക്കുന്നു...");
       setStatusTextEn("(Listening and thinking...)");
 
-      // Read recorded audio file as base64
-      let audioBase64: string | undefined;
-      try {
-        const response = await fetch(uri);
-        const blob = await response.blob();
-        audioBase64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const res = reader.result as string;
-            const b64 = res.includes(",") ? res.split(",")[1] : res;
-            resolve(b64);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-      } catch (readErr) {
-        console.warn("Could not read local audio as base64:", readErr);
-      }
-
-      if (audioBase64) {
+      if (uri) {
         const responseData = await respondCompanionVoiceDirect({
           elderId: DEMO_ELDER_ID,
           text: "നമസ്കാരം",
