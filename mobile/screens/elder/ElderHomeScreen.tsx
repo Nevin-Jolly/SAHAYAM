@@ -101,8 +101,7 @@ export default function ElderHomeScreen() {
     })();
 
     return () => {
-      // Clean up player and any active recorder on unmount
-      player.remove();
+      // Clean up any active recorder on unmount
       recorderRef.current?.stop().catch(() => {});
       recorderRef.current = null;
     };
