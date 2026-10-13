@@ -17,6 +17,13 @@ import {
   limit,
   onSnapshot,
 } from "firebase/firestore";
+import {
+  getCachedMedications,
+  subscribeMedications,
+  Medication,
+  isMedicationDueOrOverdue,
+} from "../../services/medicationService";
+import { BASE_URL } from "../../constants/api";
 
 /**
  * OverviewTab — Family Dashboard, Tab 1
@@ -39,12 +46,16 @@ interface Overview {
   medication_count: number;
 }
 
-function statusColor(status: Overview["last_checkin_status"]): string {
+function statusColor(
+  status: Overview["last_checkin_status"],
+  hasUntakenMed?: boolean
+): string {
+  if (hasUntakenMed || status === "unanswered") {
+    return "#EF4444"; // red
+  }
   switch (status) {
     case "answered":
       return "#10B981"; // green
-    case "unanswered":
-      return "#EF4444"; // red
     case "pending":
       return "#F59E0B"; // amber
     default:
@@ -52,12 +63,16 @@ function statusColor(status: Overview["last_checkin_status"]): string {
   }
 }
 
-function statusLabel(status: Overview["last_checkin_status"]): string {
+function statusLabel(
+  status: Overview["last_checkin_status"],
+  hasUntakenMed?: boolean
+): string {
+  if (hasUntakenMed || status === "unanswered") {
+    return "✗ No Response";
+  }
   switch (status) {
     case "answered":
       return "✓ Responded";
-    case "unanswered":
-      return "✗ No Response";
     case "pending":
       return "⏳ Pending";
     default:
@@ -86,74 +101,179 @@ export default function OverviewTab() {
     last_checkin_status: "answered",
     last_checkin_time: new Date().toISOString(),
     active_escalations: 0,
-    medication_count: 2,
+    medication_count: getCachedMedications().filter((m) => m.active).length || 2,
   });
-  const [loading, setLoading] = useState(true);
+  const [dueUntakenMed, setDueUntakenMed] = useState<Medication | null>(null);
+  const dueUntakenMedRef = React.useRef<Medication | null>(null);
+  dueUntakenMedRef.current = dueUntakenMed;
+
+  const [syncing, setSyncing] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string | null>("Just now");
 
   useEffect(() => {
-    setLoading(true);
+    let isMounted = true;
+    const syncTimer = setTimeout(() => {
+      setSyncing(false);
+    }, 2000);
 
-    // 1. Subscribe to latest check-in
+    // 1. LAN Server Polling for instant multi-device reflection
+    const fetchServerDashboard = async () => {
+      try {
+        const res = await fetch(`${BASE_URL}/dashboard/family_demo_001`);
+        if (res.ok) {
+          const d = await res.json();
+          if (isMounted) {
+            setOverview((prev) => {
+              const activeCount =
+                typeof d.active_escalations === "number"
+                  ? d.active_escalations
+                  : prev.active_escalations;
+              let checkinStatus = d.last_checkin_status || prev.last_checkin_status;
+              // If there's an active due medication, check-in MUST indicate unanswered
+              if (d.due_untaken_med || dueUntakenMedRef.current) {
+                checkinStatus = "unanswered";
+              }
+              return {
+                ...prev,
+                last_checkin_status: checkinStatus,
+                last_checkin_time: d.last_checkin_time || prev.last_checkin_time,
+                active_escalations: activeCount,
+                medication_count:
+                  typeof d.medication_count === "number"
+                    ? d.medication_count
+                    : prev.medication_count,
+              };
+            });
+            if (d.due_untaken_med_details) {
+              setDueUntakenMed(d.due_untaken_med_details);
+            } else if (!d.due_untaken_med && !dueUntakenMedRef.current) {
+              setDueUntakenMed(null);
+            }
+            setLastUpdated(new Date().toLocaleTimeString("en-IN"));
+            setSyncing(false);
+            setRefreshing(false);
+          }
+        }
+      } catch (_) {}
+    };
+
+    fetchServerDashboard();
+    const pollInterval = setInterval(fetchServerDashboard, 2000);
+
+    // 2. Subscribe to check-ins without strict orderBy to avoid type/index drops
     const checkinsRef = collection(db, "elders", ELDER_ID, "checkins");
-    const checkinQuery = query(checkinsRef, orderBy("scheduledTime", "desc"), limit(1));
+    const checkinQuery = query(checkinsRef, limit(30));
     const unsubCheckins = onSnapshot(
       checkinQuery,
       (snap) => {
-        if (!snap.empty) {
-          const doc = snap.docs[0].data();
+        if (!snap.empty && isMounted) {
+          const docs: any[] = [];
+          snap.forEach((d) => docs.push({ id: d.id, ...d.data() }));
+
+          docs.sort((a, b) => {
+            const timeA =
+              a.scheduledTime?.toMillis?.() ||
+              (a.scheduledTime?.toDate ? a.scheduledTime.toDate().getTime() : 0) ||
+              (typeof a.scheduledTime === "string" ? new Date(a.scheduledTime).getTime() : 0) ||
+              (a.createdAt?.toMillis?.() || (a.createdAt ? new Date(a.createdAt).getTime() : 0));
+            const timeB =
+              b.scheduledTime?.toMillis?.() ||
+              (b.scheduledTime?.toDate ? b.scheduledTime.toDate().getTime() : 0) ||
+              (typeof b.scheduledTime === "string" ? new Date(b.scheduledTime).getTime() : 0) ||
+              (b.createdAt?.toMillis?.() || (b.createdAt ? new Date(b.createdAt).getTime() : 0));
+            return timeB - timeA;
+          });
+
+          const doc = docs[0];
           const scheduledIso =
             doc.scheduledTime?.toDate?.()?.toISOString?.() ||
-            (typeof doc.scheduledTime === "string" ? doc.scheduledTime : null);
-          setOverview((prev) => ({
-            ...prev,
-            last_checkin_status: doc.status || "answered",
-            last_checkin_time: scheduledIso || prev.last_checkin_time,
-          }));
+            (typeof doc.scheduledTime === "string" ? doc.scheduledTime : null) ||
+            doc.createdAt?.toDate?.()?.toISOString?.() ||
+            new Date().toISOString();
+
+          setOverview((prev) => {
+            let effectiveStatus = doc.status || "answered";
+            if (dueUntakenMedRef.current) {
+              effectiveStatus = "unanswered";
+            } else if (
+              (prev.active_escalations === 0 || doc.resolved) &&
+              (doc.type === "emergency_sos" || doc.escalationTriggered)
+            ) {
+              effectiveStatus = "answered";
+            }
+            return {
+              ...prev,
+              last_checkin_status: effectiveStatus,
+              last_checkin_time: scheduledIso,
+            };
+          });
         }
         setLastUpdated(new Date().toLocaleTimeString("en-IN"));
-        setLoading(false);
+        setSyncing(false);
         setRefreshing(false);
       },
       (err) => {
-        console.warn("Checkins snapshot listener notice:", err);
-        setLoading(false);
+        setSyncing(false);
         setRefreshing(false);
       }
     );
 
-    // 2. Subscribe to active (unresolved) escalations
+    // 3. Subscribe to active (unresolved) escalations
     const escRef = collection(db, "elders", ELDER_ID, "escalations");
     const escQuery = query(escRef, where("resolved", "==", false));
     const unsubEsc = onSnapshot(
       escQuery,
       (snap) => {
-        setOverview((prev) => ({
-          ...prev,
-          active_escalations: snap.size,
-        }));
-        setLastUpdated(new Date().toLocaleTimeString("en-IN"));
+        if (isMounted) {
+          const openCount = snap.size;
+          setOverview((prev) => ({
+            ...prev,
+            active_escalations: openCount,
+            last_checkin_status:
+              dueUntakenMedRef.current
+                ? "unanswered"
+                : openCount === 0 && prev.last_checkin_status === "unanswered"
+                ? "answered"
+                : prev.last_checkin_status,
+          }));
+          setLastUpdated(new Date().toLocaleTimeString("en-IN"));
+          setSyncing(false);
+        }
       },
-      (err) => console.warn("Escalations listener notice:", err)
+      (err) => {
+        setSyncing(false);
+      }
     );
 
-    // 3. Subscribe to active medications count
-    const medsRef = collection(db, "elders", ELDER_ID, "medications");
-    const medsQuery = query(medsRef, where("active", "==", true));
-    const unsubMeds = onSnapshot(
-      medsQuery,
-      (snap) => {
-        setOverview((prev) => ({
-          ...prev,
-          medication_count: snap.size,
-        }));
-        setLastUpdated(new Date().toLocaleTimeString("en-IN"));
+    // 4. Subscribe to medications count and untaken due reminder
+    const unsubMeds = subscribeMedications(
+      ELDER_ID,
+      (meds) => {
+        if (isMounted) {
+          const activeCount = meds.filter((m) => m.active).length;
+          const dueMed = meds.find((m) => isMedicationDueOrOverdue(m)) || null;
+          setDueUntakenMed(dueMed);
+          dueUntakenMedRef.current = dueMed;
+
+          setOverview((prev) => ({
+            ...prev,
+            medication_count: activeCount,
+            last_checkin_status: dueMed ? "unanswered" : prev.last_checkin_status,
+          }));
+          setLastUpdated(new Date().toLocaleTimeString("en-IN"));
+          setSyncing(false);
+        }
       },
-      (err) => console.warn("Medications listener notice:", err)
+      (err) => {
+        setSyncing(false);
+      }
     );
 
     return () => {
+      isMounted = false;
+      clearTimeout(syncTimer);
+      clearInterval(pollInterval);
       unsubCheckins();
       unsubEsc();
       unsubMeds();
@@ -162,18 +282,27 @@ export default function OverviewTab() {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    setLastUpdated(new Date().toLocaleTimeString("en-IN"));
-    setTimeout(() => setRefreshing(false), 600);
+    setSyncing(true);
+    fetch(`${BASE_URL}/dashboard/family_demo_001`)
+      .then((r) => r.json())
+      .then((d) => {
+        setOverview((prev) => ({
+          ...prev,
+          last_checkin_status: d.last_checkin_status || prev.last_checkin_status,
+          last_checkin_time: d.last_checkin_time || prev.last_checkin_time,
+          active_escalations: typeof d.active_escalations === "number" ? d.active_escalations : prev.active_escalations,
+          medication_count: typeof d.medication_count === "number" ? d.medication_count : prev.medication_count,
+        }));
+      })
+      .catch(() => {})
+      .finally(() => {
+        setLastUpdated(new Date().toLocaleTimeString("en-IN"));
+        setTimeout(() => {
+          setRefreshing(false);
+          setSyncing(false);
+        }, 500);
+      });
   }, []);
-
-  if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#6C63FF" />
-        <Text style={styles.loadingText}>Loading dashboard…</Text>
-      </View>
-    );
-  }
 
   return (
     <ScrollView
@@ -189,9 +318,22 @@ export default function OverviewTab() {
       {/* Header */}
       <View style={styles.headerRow}>
         <View>
-          <Text style={styles.title}>Overview</Text>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Text style={styles.title}>Overview</Text>
+            {syncing && (
+              <ActivityIndicator
+                size="small"
+                color="#6C63FF"
+                style={{ marginLeft: 8 }}
+              />
+            )}
+          </View>
           <Text style={styles.subtitle}>
-            {lastUpdated ? `Updated ${lastUpdated}` : "Pull down to refresh"}
+            {syncing
+              ? "⚡ Syncing live data…"
+              : lastUpdated
+              ? `Updated ${lastUpdated}`
+              : "Live Realtime Sync"}
           </Text>
         </View>
         <TouchableOpacity
@@ -205,25 +347,34 @@ export default function OverviewTab() {
 
       {/* Last Check-in Card */}
       <View style={styles.card}>
-        <Text style={styles.cardLabel}>LAST CHECK-IN</Text>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <Text style={styles.cardLabel}>LAST CHECK-IN</Text>
+          {dueUntakenMed && (
+            <View style={styles.dueBadge}>
+              <Text style={styles.dueBadgeText}>💊 Reminder Active</Text>
+            </View>
+          )}
+        </View>
         <View style={styles.checkinRow}>
           <View
             style={[
               styles.statusDot,
-              { backgroundColor: statusColor(overview?.last_checkin_status ?? null) },
+              { backgroundColor: statusColor(overview?.last_checkin_status ?? null, !!dueUntakenMed) },
             ]}
           />
           <Text
             style={[
               styles.statusText,
-              { color: statusColor(overview?.last_checkin_status ?? null) },
+              { color: statusColor(overview?.last_checkin_status ?? null, !!dueUntakenMed) },
             ]}
           >
-            {statusLabel(overview?.last_checkin_status ?? null)}
+            {statusLabel(overview?.last_checkin_status ?? null, !!dueUntakenMed)}
           </Text>
         </View>
         <Text style={styles.timeText}>
-          {formatTime(overview?.last_checkin_time ?? null)}
+          {dueUntakenMed
+            ? `Waiting for elder: ${dueUntakenMed.name} (${dueUntakenMed.dosage})`
+            : formatTime(overview?.last_checkin_time ?? null)}
         </Text>
       </View>
 
@@ -302,6 +453,7 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "800",
     color: "#F9FAFB",
+    paddingRight: 16,
   },
   subtitle: {
     fontSize: 12,
@@ -342,6 +494,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 8,
+    flexWrap: "wrap",
   },
   statusDot: {
     width: 10,
@@ -350,8 +503,9 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   statusText: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "700",
+    flexShrink: 1,
   },
   timeText: {
     fontSize: 13,
@@ -368,7 +522,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "#2A2A4A",
-    padding: 20,
+    paddingVertical: 18,
+    paddingHorizontal: 6,
     alignItems: "center",
   },
   statCardAlert: {
@@ -376,15 +531,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#1F1218",
   },
   statNumber: {
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: "800",
     color: "#F9FAFB",
     marginBottom: 4,
   },
   statLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "600",
     color: "#9CA3AF",
+    textAlign: "center",
   },
   statSub: {
     fontSize: 11,
@@ -400,6 +556,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
+  },
+  dueBadge: {
+    backgroundColor: "#EF444422",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: "#EF444455",
+  },
+  dueBadgeText: {
+    color: "#EF4444",
+    fontSize: 11,
+    fontWeight: "700",
   },
   infoBox: {
     flexDirection: "row",

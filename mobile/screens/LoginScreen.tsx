@@ -1,208 +1,195 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
   StatusBar,
+  ScrollView,
 } from "react-native";
 
-/**
- * LoginScreen — Phase 7 update: Role selection without HTTP health check.
- *
- * The backend is Firebase Callable Functions only — there is no REST /health
- * endpoint, so the previous health-check ping was blocking login.
- *
- * Flow (simplified):
- *   1. User taps "Elder" or "Family Member".
- *   2. A 400 ms loading state gives visual feedback.
- *   3. onLogin(role) is called, advancing to the role-appropriate screen.
- *   4. If the callable functions are unreachable, each screen shows its own
- *      error feedback when actual data calls fail.
- *
- * Phase 6 privacy note displayed inline:
- *   Conversation history is private to the elder; family sees structured data only.
- *
- * Note: Full auth (credentials, JWT) is out of scope for this academic project.
- * Role selection here provides the panel-demonstrable separation of access paths.
- */
-
 interface Props {
-  onLogin: (role: "elder" | "family") => void;
+  onSelectElder: () => void;
+  onSelectFamily: () => void;
 }
 
-export default function LoginScreen({ onLogin }: Props) {
-  const [checking, setChecking] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<"elder" | "family" | null>(null);
-
-  const handleRoleSelect = async (role: "elder" | "family") => {
-    setSelectedRole(role);
-    setChecking(true);
-    // Brief loading state for UX feedback, then navigate.
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    setChecking(false);
-    setSelectedRole(null);
-    onLogin(role);
-  };
-
+/**
+ * LoginScreen / Role Portal Screen
+ * Welcome gateway allowing users to choose between:
+ *   1. Dedicated Elder Login Page
+ *   2. Dedicated Family Member Login Page
+ */
+export default function LoginScreen({ onSelectElder, onSelectFamily }: Props) {
   return (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0D0D1A" />
 
-      {/* Logo / Title */}
+      {/* Brand Header */}
       <View style={styles.logoArea}>
         <Text style={styles.logoEmoji}>🤝</Text>
         <Text style={styles.appName}>സഹായം</Text>
         <Text style={styles.appNameEn}>SAHAYAM</Text>
-        <Text style={styles.tagline}>Malayalam Voice Companion{"\n"}for Elderly Care</Text>
-      </View>
-
-      {/* Role Selection */}
-      <View style={styles.roleArea}>
-        <Text style={styles.prompt}>Who are you?</Text>
-
-        {/* Elder button */}
-        <TouchableOpacity
-          style={[
-            styles.roleBtn,
-            styles.elderBtn,
-            selectedRole === "elder" && styles.roleBtnLoading,
-          ]}
-          onPress={() => handleRoleSelect("elder")}
-          disabled={checking}
-          accessibilityLabel="I am the elder"
-          accessibilityRole="button"
-        >
-          {checking && selectedRole === "elder" ? (
-            <ActivityIndicator size="large" color="#fff" />
-          ) : (
-            <>
-              <Text style={styles.roleBtnIcon}>👴</Text>
-              <Text style={styles.roleBtnTitle}>ഞാൻ മൂപ്പര്‍ ആണ്</Text>
-              <Text style={styles.roleBtnSub}>I am the Elder</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        {/* Family button */}
-        <TouchableOpacity
-          style={[
-            styles.roleBtn,
-            styles.familyBtn,
-            selectedRole === "family" && styles.roleBtnLoading,
-          ]}
-          onPress={() => handleRoleSelect("family")}
-          disabled={checking}
-          accessibilityLabel="I am a family member"
-          accessibilityRole="button"
-        >
-          {checking && selectedRole === "family" ? (
-            <ActivityIndicator size="large" color="#fff" />
-          ) : (
-            <>
-              <Text style={styles.roleBtnIcon}>👨‍👩‍👦</Text>
-              <Text style={styles.roleBtnTitle}>ഞാൻ കുടുംബാംഗം ആണ്</Text>
-              <Text style={styles.roleBtnSub}>I am a Family Member</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {/* Privacy notice */}
-      <View style={styles.privacyNote}>
-        <Text style={styles.privacyIcon}>🔒</Text>
-        <Text style={styles.privacyText}>
-          The elder's conversations are private and not accessible to family members.
+        <Text style={styles.tagline}>
+          മുതിർന്നവർക്കായുള്ള മലയാളം വോയിസ് സഹായി{"\n"}
+          (Malayalam Voice Companion for Elderly Care)
         </Text>
       </View>
 
-      {/* Footer */}
-      <Text style={styles.footer}>KTU CSD415 · Group 9</Text>
-    </View>
+      {/* Role Selection Prompt */}
+      <View style={styles.roleArea}>
+        <Text style={styles.prompt}>പ്രവേശന മാർഗ്ഗം തിരഞ്ഞെടുക്കുക (Select Role):</Text>
+
+        {/* Elder Entry Card */}
+        <TouchableOpacity
+          style={[styles.roleBtn, styles.elderBtn]}
+          onPress={onSelectElder}
+          activeOpacity={0.85}
+          accessibilityLabel="Elder portal"
+          accessibilityRole="button"
+        >
+          <View style={styles.roleBtnHeader}>
+            <Text style={styles.roleBtnIcon}>👴</Text>
+            <View style={styles.roleBtnTextContainer}>
+              <Text style={styles.roleBtnTitle}>മുതിർന്ന വ്യക്തി (Elder)</Text>
+              <Text style={styles.roleBtnSub}>
+                വോയിസ് സഹായി ഉപയോഗിച്ച് സംസാരിക്കാം
+              </Text>
+              <Text style={styles.roleBtnAction}>തുടങ്ങാൻ ഇവിടെ തൊടുക →</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        {/* Family Entry Card */}
+        <TouchableOpacity
+          style={[styles.roleBtn, styles.familyBtn]}
+          onPress={onSelectFamily}
+          activeOpacity={0.85}
+          accessibilityLabel="Family caregiver portal"
+          accessibilityRole="button"
+        >
+          <View style={styles.roleBtnHeader}>
+            <Text style={styles.roleBtnIcon}>👨‍👩‍👦</Text>
+            <View style={styles.roleBtnTextContainer}>
+              <Text style={styles.roleBtnTitle}>കുടുംബാംഗം (Family Member)</Text>
+              <Text style={styles.roleBtnSub}>
+                ആരോഗ്യവും മരുന്നുകളും നിരീക്ഷിക്കാം
+              </Text>
+              <Text style={[styles.roleBtnAction, styles.familyActionText]}>
+                ഡാഷ്‌ബോർഡിലേക്ക് പോകുക →
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      {/* Privacy Notice */}
+      <View style={styles.privacyNote}>
+        <Text style={styles.privacyIcon}>🔒</Text>
+        <Text style={styles.privacyText}>
+          മുതിർന്നവരുടെ സംഭാഷണങ്ങൾ തികച്ചും സ്വകാര്യമാണ്. കുടുംബാംഗങ്ങൾക്ക് ഇത് കേൾക്കാൻ സാധിക്കില്ല.
+        </Text>
+      </View>
+
+      {/* Academic Footer */}
+      <Text style={styles.footer}>KTU B.Tech Capstone CSD415 · Group 9</Text>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor: "#0D0D1A",
-    paddingHorizontal: 28,
-    paddingTop: 60,
-    paddingBottom: 32,
+    paddingHorizontal: 22,
+    paddingTop: 48,
+    paddingBottom: 28,
     justifyContent: "space-between",
   },
   logoArea: {
     alignItems: "center",
-    paddingTop: 20,
+    paddingTop: 12,
   },
   logoEmoji: {
-    fontSize: 64,
-    marginBottom: 12,
+    fontSize: 56,
+    marginBottom: 8,
   },
   appName: {
-    fontSize: 36,
+    fontSize: 38,
     fontWeight: "800",
-    color: "#6C63FF",
-    letterSpacing: 3,
+    color: "#A78BFA",
+    textAlign: "center",
+    marginBottom: 2,
   },
   appNameEn: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "700",
-    color: "#4B5563",
-    letterSpacing: 6,
-    marginTop: 2,
-  },
-  tagline: {
-    fontSize: 14,
     color: "#6B7280",
     textAlign: "center",
-    marginTop: 12,
-    lineHeight: 22,
+    letterSpacing: 2, // Low letterSpacing avoids Android right-edge clipping of 'M'
+    marginBottom: 10,
+  },
+  tagline: {
+    fontSize: 13,
+    color: "#9CA3AF",
+    textAlign: "center",
+    lineHeight: 20,
+    paddingHorizontal: 8,
   },
   roleArea: {
     gap: 16,
+    marginVertical: 20,
   },
   prompt: {
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: "700",
-    color: "#9CA3AF",
+    color: "#D1D5DB",
     textAlign: "center",
-    marginBottom: 8,
+    marginBottom: 6,
   },
   roleBtn: {
-    borderRadius: 24,
-    paddingVertical: 28,
-    paddingHorizontal: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 110,
+    borderRadius: 22,
+    paddingVertical: 20,
+    paddingHorizontal: 18,
     borderWidth: 2,
   },
   elderBtn: {
-    backgroundColor: "#1A1A2E",
+    backgroundColor: "#16162C",
     borderColor: "#6C63FF",
   },
   familyBtn: {
-    backgroundColor: "#1A2E1A",
+    backgroundColor: "#11221A",
     borderColor: "#10B981",
   },
-  roleBtnLoading: {
-    opacity: 0.7,
+  roleBtnHeader: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   roleBtnIcon: {
-    fontSize: 36,
-    marginBottom: 8,
+    fontSize: 44,
+    marginRight: 16,
+  },
+  roleBtnTextContainer: {
+    flex: 1,
   },
   roleBtnTitle: {
     fontSize: 18,
     fontWeight: "800",
     color: "#F9FAFB",
-    marginBottom: 2,
+    marginBottom: 4,
   },
   roleBtnSub: {
     fontSize: 13,
     color: "#9CA3AF",
+    marginBottom: 6,
+    lineHeight: 18,
+  },
+  roleBtnAction: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#A78BFA",
+  },
+  familyActionText: {
+    color: "#34D399",
   },
   privacyNote: {
     flexDirection: "row",
@@ -212,11 +199,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#1F2937",
     alignItems: "flex-start",
+    marginTop: 10,
   },
   privacyIcon: {
-    fontSize: 14,
-    marginRight: 8,
-    marginTop: 1,
+    fontSize: 16,
+    marginRight: 10,
+    marginTop: 2,
   },
   privacyText: {
     flex: 1,
@@ -226,8 +214,8 @@ const styles = StyleSheet.create({
   },
   footer: {
     textAlign: "center",
-    color: "#374151",
+    color: "#4B5563",
     fontSize: 11,
-    letterSpacing: 1,
+    marginTop: 14,
   },
 });

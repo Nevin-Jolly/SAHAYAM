@@ -9,7 +9,7 @@ import { Role, RoleContext, useRole, RoleContextType } from "../context/RoleCont
 export { Role, RoleContext, useRole, RoleContextType };
 
 export type RootStackParamList = {
-  Login: undefined;
+  Portal: undefined;
   ElderHome: undefined;
   FamilyDashboard: undefined;
 };
@@ -19,8 +19,12 @@ const Stack = createStackNavigator<RootStackParamList>();
 export default function RootNavigator() {
   const [role, setRole] = useState<Role | null>(null);
 
-  const handleLogin = (selectedRole: Role) => {
-    setRole(selectedRole);
+  const handleSelectElder = () => {
+    setRole("elder");
+  };
+
+  const handleSelectFamily = () => {
+    setRole("family");
   };
 
   const handleLogout = () => {
@@ -32,8 +36,13 @@ export default function RootNavigator() {
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           {!role ? (
-            <Stack.Screen name="Login">
-              {() => <LoginScreen onLogin={handleLogin} />}
+            <Stack.Screen name="Portal">
+              {() => (
+                <LoginScreen
+                  onSelectElder={handleSelectElder}
+                  onSelectFamily={handleSelectFamily}
+                />
+              )}
             </Stack.Screen>
           ) : role === "elder" ? (
             <Stack.Screen name="ElderHome" component={ElderHomeScreen} />

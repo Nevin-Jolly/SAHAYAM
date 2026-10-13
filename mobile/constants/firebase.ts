@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore, getFirestore } from "firebase/firestore";
 import { getFunctions } from "firebase/functions";
 
 // Firebase web/mobile client configuration (public identifiers for project sahayam-33cd4)
@@ -14,7 +14,19 @@ const firebaseConfig = {
 
 // Initialize Firebase singleton
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-const db = getFirestore(app);
+
+// In React Native / Expo, the default WebChannel streaming transport cannot establish
+// a connection and causes "client is offline" errors. Enabling experimentalForceLongPolling resolves this.
+let db: ReturnType<typeof getFirestore>;
+try {
+  db = initializeFirestore(app, {
+    experimentalForceLongPolling: true,
+  });
+} catch {
+  db = getFirestore(app);
+}
+
 const functions = getFunctions(app);
 
 export { app, db, functions };
+

@@ -1,5 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 
@@ -710,3 +711,74 @@ export const setCareNote = onCall(
     }
   }
 );
+
+/**
+ * Firestore Trigger: onEscalationCreated
+ * Automatically fires whenever an alert or escalation is created in elders/{elderId}/escalations.
+ * Sends immediate high-priority FCM push notification to all linked family members' devices.
+ */
+export const onEscalationCreated = onDocumentCreated(
+  "elders/{elderId}/escalations/{escalationId}",
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+    const data = snap.data();
+    const elderId = event.params.elderId;
+    const escalationId = event.params.escalationId;
+
+    try {
+      // Find all family members registered for this elder
+      const familyUsersSnapshot = await db
+        .collection("users")
+        .where("elderId", "==", elderId)
+        .where("role", "==", "family")
+        .get();
+
+      const fcmTokens: string[] = [];
+      familyUsersSnapshot.forEach((doc) => {
+        const token = doc.data().fcmToken;
+        if (token) fcmTokens.push(token);
+      });
+
+      const isSos = data.reason === "elder_sos" || data.reason === "emergency_sos";
+      const isMissedMed = data.reason === "missed_medication";
+
+      const title = isSos
+        ? "🚨 അടിയന്തര മുന്നറിയിപ്പ് (SAHAYAM SOS Alert)"
+        : isMissedMed
+        ? "💊 മരുന്ന് കഴിച്ചില്ല — അടിയന്തര മുന്നറിയിപ്പ്"
+        : "⚠️ ശ്രദ്ധിക്കുക: അടിയന്തര മുന്നറിയിപ്പ് (SAHAYAM Alert)";
+
+      const body = data.notes || (isSos
+        ? "മുതിർന്നയാളിൽ നിന്ന് അടിയന്തര സഹായ അഭ്യർത്ഥന ലഭിച്ചിരിക്കുന്നു!"
+        : isMissedMed
+        ? "മുതിർന്നയാൾ മരുന്ന് കഴിച്ചിട്ടില്ല. രണ്ട് ഓർമ്മപ്പെടുത്തലുകൾ നൽകിയിട്ടും പ്രതികരിച്ചില്ല."
+        : "മുതിർന്നയാളുടെ അടിയന്തര മുന്നറിയിപ്പ് ലഭിച്ചിട്ടുണ്ട്.");
+
+      if (fcmTokens.length > 0) {
+        await admin.messaging().sendEachForMulticast({
+          tokens: fcmTokens,
+          notification: {
+            title,
+            body,
+          },
+          data: {
+            elderId,
+            escalationId,
+            reason: String(data.reason || "alert"),
+            type: "ESCALATION_ALERT",
+          },
+          android: {
+            priority: "high",
+          },
+        });
+
+        await snap.ref.update({ familyNotified: true });
+        console.log(`[FCM] Dispatched escalation push notification to ${fcmTokens.length} family tokens.`);
+      }
+    } catch (pushErr) {
+      console.error("[FCM Push Notification Error]:", pushErr);
+    }
+  }
+);
+
