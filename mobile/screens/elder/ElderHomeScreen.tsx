@@ -49,6 +49,7 @@ import {
   requestProactiveVoice,
 } from "../../constants/api";
 import { useRole } from "../../context/RoleContext";
+import { useTheme } from "../../context/ThemeContext";
 import * as FileSystem from "expo-file-system/legacy";
 
 const { width } = Dimensions.get("window");
@@ -100,6 +101,7 @@ export default function ElderHomeScreen() {
   const [fallbackText, setFallbackText] = useState("");
   const [showFallback, setShowFallback] = useState(false);
   const { logout } = useRole();
+  const { theme, isDark, toggleTheme } = useTheme();
 
   // Medication scheduling & reminder states
   const [medications, setMedications] = useState<Medication[]>([]);
@@ -601,7 +603,37 @@ export default function ElderHomeScreen() {
         }
       }
 
-      // 4. In-App Companion Fallback: if server unreachable, generate empathetic local response
+      // 3.5. Try Firebase Cloud Function (Managed-Cloud v2 pipeline)
+      if (!answered && audioBase64 && audioBase64.length > 50) {
+        try {
+          const cfPromise = callRespondCompanionVoice({
+            elderId: DEMO_ELDER_ID,
+            audioBase64,
+          });
+          const cfRes = await Promise.race([
+            cfPromise,
+            new Promise<null>((_, reject) => setTimeout(() => reject(new Error("CF timeout")), 5000)),
+          ]);
+          if (cfRes && (cfRes as any).data?.success && (cfRes as any).data?.response) {
+            answered = true;
+            const cfData = (cfRes as any).data;
+            setLastResponse(cfData.response);
+            if (cfData.audioUri) {
+              await playSynthesizedAudio(cfData.audioUri);
+              return;
+            } else {
+              setAppState("idle");
+              setStatusText("സംസാരിക്കാൻ ഇവിടെ അമർത്തുക");
+              setStatusTextEn("(Tap to speak)");
+              return;
+            }
+          }
+        } catch (_) {
+          // Cloud function unavailable, continue to in-app fallback
+        }
+      }
+
+      // 4. In-App Companion Fallback: if server and cloud function unreachable, generate empathetic local response
       if (!answered) {
         try {
           const fallbackData = await respondCompanionVoiceDirect({
@@ -670,7 +702,34 @@ export default function ElderHomeScreen() {
           }
         }
       } catch (serverErr) {
-        console.log("Companion server text call unavailable, using local companion fallback:", serverErr);
+        console.log("Companion server text call unavailable, trying Cloud Function or local fallback:", serverErr);
+      }
+
+      // 1.5. Try Firebase Cloud Function (Managed-Cloud v2 pipeline)
+      try {
+        const cfPromise = callRespondCompanionVoice({
+          elderId: DEMO_ELDER_ID,
+          text,
+        });
+        const cfRes = await Promise.race([
+          cfPromise,
+          new Promise<null>((_, reject) => setTimeout(() => reject(new Error("CF timeout")), 5000)),
+        ]);
+        if (cfRes && (cfRes as any).data?.success && (cfRes as any).data?.response) {
+          const cfData = (cfRes as any).data;
+          setLastResponse(cfData.response);
+          if (cfData.audioUri) {
+            await playSynthesizedAudio(cfData.audioUri);
+            return;
+          } else {
+            setAppState("idle");
+            setStatusText("സംസാരിക്കാൻ ഇവിടെ അമർത്തുക");
+            setStatusTextEn("(Tap to speak)");
+            return;
+          }
+        }
+      } catch (_) {
+        // Cloud Function unavailable, proceed to in-app companion fallback
       }
 
       // 2. Local in-app companion fallback
@@ -839,7 +898,7 @@ export default function ElderHomeScreen() {
       case "speaking":
         return "#10B981"; // Green while speaking
       default:
-        return "#6C63FF"; // Default purple
+        return theme.primary;
     }
   }
 
@@ -855,39 +914,57 @@ export default function ElderHomeScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[styles.container, { backgroundColor: theme.background }]}
         keyboardShouldPersistTaps="handled"
       >
-        <StatusBar barStyle="light-content" backgroundColor="#0D0D1A" />
+        <StatusBar barStyle={theme.statusBarStyle} backgroundColor={theme.statusBarBg} />
 
-        {/* Top header with Switch Role and Proactive Demo Trigger */}
+        {/* Top header with Switch Role, Theme Toggle, and Proactive Demo Trigger */}
         <View style={styles.topBar}>
           <TouchableOpacity
-            style={styles.proactiveTriggerBtn}
+            style={[styles.proactiveTriggerBtn, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}
             onPress={() => triggerProactiveSpeech("daily_checkin")}
             accessibilityLabel="Trigger Proactive Speech"
           >
-            <Text style={styles.proactiveTriggerBtnText}>⚡ മുൻകൈയെടുക്കൽ (Proactive)</Text>
+            <Text style={[styles.proactiveTriggerBtnText, { color: theme.primary }]}>⚡ മുൻകൈയെടുക്കൽ (Proactive)</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.switchRoleBtn}
-            onPress={logout}
-            accessibilityLabel="Switch Role"
-          >
-            <Text style={styles.switchRoleBtnText}>🔄 റോൾ മാറ്റുക (Switch)</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+            <TouchableOpacity
+              style={[styles.switchRoleBtn, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}
+              onPress={toggleTheme}
+              accessibilityLabel="Toggle Theme"
+            >
+              <Text style={[styles.switchRoleBtnText, { color: theme.textSecondary }]}>
+                {isDark ? "☀️ Light" : "🌙 Dark"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.switchRoleBtn, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}
+              onPress={logout}
+              accessibilityLabel="Switch Role"
+            >
+              <Text style={[styles.switchRoleBtnText, { color: theme.primary }]}>🔄 റോൾ (Switch)</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* App name in Malayalam script */}
-        <Text style={styles.brandMalayalam}>സഹായം</Text>
-        <Text style={styles.brandEnglish}>SAHAYAM</Text>
-        <Text style={styles.tagline}>മുതിർന്നവർക്കായുള്ള മലയാളം വോയിസ് സഹായി</Text>
+        <Text style={[styles.brandMalayalam, { color: theme.brandMalayalam }]}>സഹായം</Text>
+        <Text style={[styles.brandEnglish, { color: theme.brandEnglish }]}>SAHAYAM</Text>
+        <Text style={[styles.tagline, { color: theme.textMuted }]}>മുതിർന്നവർക്കായുള്ള മലയാളം വോയിസ് സഹായി</Text>
 
         {/* Large mic button with pulse animation */}
         <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
           <TouchableOpacity
-            style={[styles.micButton, { backgroundColor: getMicColor(), shadowColor: getMicColor() }]}
+            style={[
+              styles.micButton,
+              {
+                backgroundColor: getMicColor(),
+                shadowColor: isDark ? getMicColor() : theme.micShadow,
+              },
+            ]}
             activeOpacity={isMicDisabled() ? 1 : 0.8}
             onPress={handleMicPress}
             disabled={isMicDisabled()}
@@ -906,37 +983,44 @@ export default function ElderHomeScreen() {
         </Animated.View>
 
         {/* Status text */}
-        <Text style={styles.hint}>{statusText}</Text>
-        <Text style={styles.hintEn}>{statusTextEn}</Text>
+        <Text style={[styles.hint, { color: theme.text }]}>{statusText}</Text>
+        <Text style={[styles.hintEn, { color: theme.textMuted }]}>{statusTextEn}</Text>
 
         {/* Spoken Transcript display */}
         {lastTranscript ? (
-          <View style={styles.transcriptBox}>
-            <Text style={styles.transcriptLabel}>🎙️ നിങ്ങൾ പറഞ്ഞത് (You said):</Text>
-            <Text style={styles.transcriptText}>"{lastTranscript}"</Text>
+          <View style={[styles.transcriptBox, { backgroundColor: theme.transcriptBoxBg, borderColor: theme.transcriptBoxBorder }]}>
+            <Text style={[styles.transcriptLabel, { color: theme.primary }]}>🎙️ നിങ്ങൾ പറഞ്ഞത് (You said):</Text>
+            <Text style={[styles.transcriptText, { color: theme.textSecondary }]}>"{lastTranscript}"</Text>
           </View>
         ) : null}
 
         {/* Last response display */}
         {lastResponse ? (
-          <View style={styles.responseBox}>
-            <Text style={styles.responseLabel}>സഹായം:</Text>
-            <Text style={styles.responseText}>{lastResponse}</Text>
+          <View style={[styles.responseBox, { backgroundColor: theme.responseBoxBg, borderColor: theme.responseBoxBorder }]}>
+            <Text style={[styles.responseLabel, { color: theme.primary }]}>സഹായം:</Text>
+            <Text style={[styles.responseText, { color: theme.text }]}>{lastResponse}</Text>
           </View>
         ) : null}
 
         {/* Text-input fallback — shown only after failed transcription */}
         {showFallback && (
-          <View style={styles.fallbackBox}>
-            <Text style={styles.fallbackLabel}>
+          <View style={[styles.fallbackBox, { backgroundColor: theme.cardSecondary, borderColor: theme.warningBorder }]}>
+            <Text style={[styles.fallbackLabel, { color: theme.warning }]}>
               ടൈപ്പ് ചെയ്ത് അയക്കൂ:
             </Text>
             <TextInput
-              style={styles.fallbackInput}
+              style={[
+                styles.fallbackInput,
+                {
+                  backgroundColor: theme.inputBg,
+                  borderColor: theme.inputBorder,
+                  color: theme.inputText,
+                },
+              ]}
               value={fallbackText}
               onChangeText={setFallbackText}
               placeholder="ഇവിടെ ടൈപ്പ് ചെയ്യുക..."
-              placeholderTextColor="#6B7280"
+              placeholderTextColor={theme.inputPlaceholder}
               multiline
               autoFocus
               returnKeyType="send"
@@ -944,7 +1028,7 @@ export default function ElderHomeScreen() {
               id="fallback-text-input"
             />
             <TouchableOpacity
-              style={styles.fallbackButton}
+              style={[styles.fallbackButton, { backgroundColor: theme.primary }]}
               onPress={handleFallbackSubmit}
               id="fallback-submit-button"
             >
@@ -958,8 +1042,15 @@ export default function ElderHomeScreen() {
           <View
             style={[
               styles.dueMedCard,
-              reminderStage === "repeat" && styles.dueMedCardRepeat,
-              reminderStage === "missed" && styles.dueMedCardMissed,
+              {
+                backgroundColor:
+                  reminderStage === "missed"
+                    ? (isDark ? "#2B0B0B" : "#FEF2F2")
+                    : reminderStage === "repeat"
+                    ? (isDark ? "#2A1B0B" : "#FFFBEB")
+                    : (isDark ? "#2E1A1A" : "#FFFBEB"),
+                borderColor: reminderStage === "missed" ? "#EF4444" : "#F59E0B",
+              },
             ]}
           >
             <View style={styles.dueMedHeaderRow}>
@@ -970,8 +1061,12 @@ export default function ElderHomeScreen() {
                 <Text
                   style={[
                     styles.dueMedTitle,
-                    reminderStage === "repeat" && { color: "#FDE68A" },
-                    reminderStage === "missed" && { color: "#FCA5A5" },
+                    {
+                      color:
+                        reminderStage === "missed"
+                          ? (isDark ? "#FCA5A5" : "#991B1B")
+                          : (isDark ? "#FDE68A" : "#92400E"),
+                    },
                   ]}
                 >
                   {reminderStage === "missed"
@@ -983,8 +1078,12 @@ export default function ElderHomeScreen() {
                 <Text
                   style={[
                     styles.dueMedSubTitle,
-                    reminderStage === "repeat" && { color: "#F59E0B" },
-                    reminderStage === "missed" && { color: "#EF4444" },
+                    {
+                      color:
+                        reminderStage === "missed"
+                          ? "#EF4444"
+                          : (isDark ? "#F59E0B" : "#D97706"),
+                    },
                   ]}
                 >
                   {reminderStage === "missed"
@@ -996,14 +1095,27 @@ export default function ElderHomeScreen() {
               </View>
             </View>
 
-            <View style={styles.dueMedBody}>
-              <Text style={styles.dueMedName}>
+            <View
+              style={[
+                styles.dueMedBody,
+                {
+                  backgroundColor: isDark ? "#1C1414" : "#FFFFFF",
+                  borderWidth: isDark ? 0 : 1,
+                  borderColor: isDark ? "transparent" : "#E2E8F0",
+                },
+              ]}
+            >
+              <Text style={[styles.dueMedName, { color: isDark ? "#FFFFFF" : "#0F172A" }]}>
                 💊 {dueMedication.name} ({dueMedication.dosage})
               </Text>
               {dueMedication.instructions ? (
-                <Text style={styles.dueMedInstructions}>📋 {dueMedication.instructions}</Text>
+                <Text style={[styles.dueMedInstructions, { color: isDark ? "#E5E7EB" : "#334155" }]}>
+                  📋 {dueMedication.instructions}
+                </Text>
               ) : null}
-              <Text style={styles.dueMedTime}>⏰ {dueMedication.time_label || dueMedication.time_str}</Text>
+              <Text style={[styles.dueMedTime, { color: theme.primary }]}>
+                ⏰ {dueMedication.time_label || dueMedication.time_str}
+              </Text>
             </View>
 
             <TouchableOpacity
@@ -1028,26 +1140,26 @@ export default function ElderHomeScreen() {
 
         {/* Today's Scheduled Medications Bar */}
         {medications.length > 0 ? (
-          <View style={styles.medSummaryCard}>
-            <View style={styles.medSummaryHeader}>
-              <Text style={styles.medSummaryTitle} numberOfLines={1}>
+          <View style={[styles.medSummaryCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+            <View style={[styles.medSummaryHeader, { borderBottomColor: theme.border }]}>
+              <Text style={[styles.medSummaryTitle, { color: theme.primary }]} numberOfLines={1}>
                 💊 ഇന്നത്തെ മരുന്നുകൾ
               </Text>
               <TouchableOpacity
                 onPress={triggerManualMedicationCheck}
-                style={styles.medSummaryVoiceBtn}
+                style={[styles.medSummaryVoiceBtn, { backgroundColor: theme.cardHighlight }]}
                 activeOpacity={0.7}
               >
-                <Text style={styles.medSummaryVoiceBtnText}>🔊 വായിക്കുക (Read)</Text>
+                <Text style={[styles.medSummaryVoiceBtnText, { color: theme.primary }]}>🔊 വായിക്കുക (Read)</Text>
               </TouchableOpacity>
             </View>
             {medications.map((m) => (
               <View key={m.id} style={styles.medSummaryItem}>
-                <Text style={styles.medSummaryItemText}>
-                  • <Text style={{ fontWeight: "700", color: "#F9FAFB" }}>{m.name}</Text> ({m.dosage}) — {m.time_label || m.time_str}
+                <Text style={[styles.medSummaryItemText, { color: theme.textSecondary }]}>
+                  • <Text style={{ fontWeight: "700", color: theme.text }}>{m.name}</Text> ({m.dosage}) — {m.time_label || m.time_str}
                 </Text>
                 {m.instructions ? (
-                  <Text style={styles.medSummaryItemSub}>  {m.instructions}</Text>
+                  <Text style={[styles.medSummaryItemSub, { color: theme.textMuted }]}>  {m.instructions}</Text>
                 ) : null}
               </View>
             ))}

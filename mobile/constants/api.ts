@@ -8,7 +8,7 @@ import { functions } from "./firebase";
 import { httpsCallable } from "firebase/functions";
 
 // Local Companion Server running on LAN with Gemini Multimodal AI
-export const BASE_URL = "http://172.20.188.69:5001";
+export const BASE_URL = "http://172.20.197.175:5001";
 
 /**
  * Type definitions for Companion Interaction
@@ -32,7 +32,7 @@ export async function requestCompanionVoice(params: {
   medications?: any[];
 }): Promise<CompanionResponse> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout for multimodal audio upload + LLM reasoning
+  const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout for multimodal audio upload + LLM reasoning
 
   try {
     const res = await fetch(`${BASE_URL}/respondCompanionVoice`, {
@@ -63,11 +63,21 @@ export async function requestProactiveVoice(params: {
   type?: string;
 }): Promise<CompanionResponse> {
   const { elderId, type = "daily_checkin" } = params;
-  const res = await fetch(
-    `${BASE_URL}/checkin/proactive?elderId=${encodeURIComponent(elderId)}&type=${encodeURIComponent(type)}`
-  );
-  if (!res.ok) throw new Error(`Companion server returned status ${res.status}`);
-  return await res.json();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
+  try {
+    const res = await fetch(
+      `${BASE_URL}/checkin/proactive?elderId=${encodeURIComponent(elderId)}&type=${encodeURIComponent(type)}`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeoutId);
+    if (!res.ok) throw new Error(`Companion server returned status ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
+  }
 }
 
 /**

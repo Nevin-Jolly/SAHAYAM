@@ -539,7 +539,7 @@ export async function resolveEmergencyEscalationDirect(
     });
     clearTimeout(timeout);
   } catch (err) {
-    console.warn("Companion server resolve warning:", err);
+    console.log("Companion server resolve (fallback to Firestore):", err);
   }
 
   // Update Firestore in background without blocking UI

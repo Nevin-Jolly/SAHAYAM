@@ -7,6 +7,7 @@ import MedicationsTab from "../screens/family/MedicationsTab";
 import CheckinsTab from "../screens/family/CheckinsTab";
 import SettingsTab from "../screens/family/SettingsTab";
 import FamilyPushNotificationBanner from "../components/FamilyPushNotificationBanner";
+import { useTheme } from "../context/ThemeContext";
 
 export type FamilyTabParamList = {
   Overview: undefined;
@@ -18,8 +19,10 @@ export type FamilyTabParamList = {
 const Tab = createBottomTabNavigator<FamilyTabParamList>();
 
 export default function FamilyTabNavigator() {
+  const { theme } = useTheme();
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       <FamilyPushNotificationBanner />
       <Tab.Navigator
         screenOptions={({ route }) => ({
@@ -43,11 +46,11 @@ export default function FamilyTabNavigator() {
             }
             return <Ionicons name={iconName} size={size} color={color} />;
           },
-          tabBarActiveTintColor: "#6C63FF",
-          tabBarInactiveTintColor: "#8E8E93",
+          tabBarActiveTintColor: theme.tabBarActive,
+          tabBarInactiveTintColor: theme.tabBarInactive,
           tabBarStyle: {
-            backgroundColor: "#1A1A2E",
-            borderTopColor: "#2A2A4A",
+            backgroundColor: theme.tabBarBg,
+            borderTopColor: theme.tabBarBorder,
           },
           tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
           headerShown: false,
@@ -65,6 +68,6 @@ export default function FamilyTabNavigator() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0D0D1A",
   },
 });
+

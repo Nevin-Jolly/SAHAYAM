@@ -1,20 +1,29 @@
 {
   "indexes": [
     {
+      "collectionGroup": "checkins",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "scheduledTime", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "escalations",
-      "queryScope": "COLLECTION",
+      "queryScope": "COLLECTION_GROUP",
       "fields": [
         { "fieldPath": "resolved", "order": "ASCENDING" },
         { "fieldPath": "triggeredAt", "order": "DESCENDING" }
       ]
-    },
-    {
-      "collectionGroup": "checkins",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "scheduledTime", "order": "DESCENDING" }
-      ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "medications",
+      "fieldPath": "active",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    }
+  ]
 }

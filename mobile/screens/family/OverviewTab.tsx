@@ -24,6 +24,7 @@ import {
   isMedicationDueOrOverdue,
 } from "../../services/medicationService";
 import { BASE_URL } from "../../constants/api";
+import { useTheme } from "../../context/ThemeContext";
 
 /**
  * OverviewTab — Family Dashboard, Tab 1
@@ -304,14 +305,16 @@ export default function OverviewTab() {
       });
   }, []);
 
+  const { theme, isDark } = useTheme();
+
   return (
     <ScrollView
-      contentContainerStyle={styles.container}
+      contentContainerStyle={[styles.container, { backgroundColor: theme.background }]}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
           onRefresh={onRefresh}
-          tintColor="#6C63FF"
+          tintColor={theme.primary}
         />
       }
     >
@@ -319,16 +322,16 @@ export default function OverviewTab() {
       <View style={styles.headerRow}>
         <View>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Text style={styles.title}>Overview</Text>
+            <Text style={[styles.title, { color: theme.text }]}>Overview</Text>
             {syncing && (
               <ActivityIndicator
                 size="small"
-                color="#6C63FF"
+                color={theme.primary}
                 style={{ marginLeft: 8 }}
               />
             )}
           </View>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.subtitle, { color: theme.textMuted }]}>
             {syncing
               ? "⚡ Syncing live data…"
               : lastUpdated
@@ -337,21 +340,21 @@ export default function OverviewTab() {
           </Text>
         </View>
         <TouchableOpacity
-          style={styles.refreshBtn}
+          style={[styles.refreshBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
           onPress={onRefresh}
           accessibilityLabel="Refresh dashboard"
         >
-          <Text style={styles.refreshBtnText}>↻</Text>
+          <Text style={[styles.refreshBtnText, { color: theme.primary }]}>↻</Text>
         </TouchableOpacity>
       </View>
 
       {/* Last Check-in Card */}
-      <View style={styles.card}>
+      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <Text style={styles.cardLabel}>LAST CHECK-IN</Text>
+          <Text style={[styles.cardLabel, { color: theme.textMuted }]}>LAST CHECK-IN</Text>
           {dueUntakenMed && (
-            <View style={styles.dueBadge}>
-              <Text style={styles.dueBadgeText}>💊 Reminder Active</Text>
+            <View style={[styles.dueBadge, { backgroundColor: theme.dangerBg, borderColor: theme.dangerBorder }]}>
+              <Text style={[styles.dueBadgeText, { color: theme.danger }]}>💊 Reminder Active</Text>
             </View>
           )}
         </View>
@@ -371,7 +374,7 @@ export default function OverviewTab() {
             {statusLabel(overview?.last_checkin_status ?? null, !!dueUntakenMed)}
           </Text>
         </View>
-        <Text style={styles.timeText}>
+        <Text style={[styles.timeText, { color: theme.textSecondary }]}>
           {dueUntakenMed
             ? `Waiting for elder: ${dueUntakenMed.name} (${dueUntakenMed.dosage})`
             : formatTime(overview?.last_checkin_time ?? null)}
@@ -384,40 +387,44 @@ export default function OverviewTab() {
         <View
           style={[
             styles.statCard,
-            (overview?.active_escalations ?? 0) > 0 && styles.statCardAlert,
+            { backgroundColor: theme.card, borderColor: theme.cardBorder },
+            (overview?.active_escalations ?? 0) > 0 && [
+              styles.statCardAlert,
+              { backgroundColor: theme.dangerBg, borderColor: theme.dangerBorder },
+            ],
           ]}
         >
-          <Text style={styles.statNumber}>
+          <Text style={[styles.statNumber, { color: (overview?.active_escalations ?? 0) > 0 ? theme.danger : theme.text }]}>
             {overview?.active_escalations ?? 0}
           </Text>
-          <Text style={styles.statLabel}>
+          <Text style={[styles.statLabel, { color: theme.textMuted }]}>
             {(overview?.active_escalations ?? 0) === 1
               ? "Open Alert"
               : "Open Alerts"}
           </Text>
           {(overview?.active_escalations ?? 0) > 0 && (
-            <Text style={styles.alertBadge}>⚠ Needs Attention</Text>
+            <Text style={[styles.alertBadge, { color: theme.danger, backgroundColor: isDark ? "#EF444422" : "#FEE2E2" }]}>⚠ Needs Attention</Text>
           )}
         </View>
 
         {/* Medications card */}
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>
+        <View style={[styles.statCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+          <Text style={[styles.statNumber, { color: theme.text }]}>
             {overview?.medication_count ?? 0}
           </Text>
-          <Text style={styles.statLabel}>
+          <Text style={[styles.statLabel, { color: theme.textMuted }]}>
             {(overview?.medication_count ?? 0) === 1
               ? "Medication"
               : "Medications"}
           </Text>
-          <Text style={styles.statSub}>Active reminders</Text>
+          <Text style={[styles.statSub, { color: theme.textSubtle }]}>Active reminders</Text>
         </View>
       </View>
 
       {/* Info note */}
-      <View style={styles.infoBox}>
+      <View style={[styles.infoBox, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}>
         <Text style={styles.infoIcon}>ℹ</Text>
-        <Text style={styles.infoText}>
+        <Text style={[styles.infoText, { color: theme.textMuted }]}>
           Conversation history is private to the elder. Only structured events
           are shown here.
         </Text>

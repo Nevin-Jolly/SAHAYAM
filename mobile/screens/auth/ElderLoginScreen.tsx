@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { useTheme } from "../../context/ThemeContext";
 
 interface Props {
   onLogin: () => void;
@@ -25,6 +26,7 @@ interface Props {
 export default function ElderLoginScreen({ onLogin, onBack }: Props) {
   const [elderName, setElderName] = useState("നിവിൻ");
   const [loading, setLoading] = useState(false);
+  const { theme } = useTheme();
 
   const handleStart = async () => {
     setLoading(true);
@@ -38,45 +40,52 @@ export default function ElderLoginScreen({ onLogin, onBack }: Props) {
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView contentContainerStyle={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#0D0D1A" />
+      <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.background }]}>
+        <StatusBar barStyle={theme.statusBarStyle} backgroundColor={theme.statusBarBg} />
 
         {/* Back Button */}
         <TouchableOpacity
-          style={styles.backBtn}
+          style={[styles.backBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
           onPress={onBack}
           accessibilityLabel="Go back"
           accessibilityRole="button"
         >
-          <Text style={styles.backBtnText}>← പിന്നോട്ട് (Back)</Text>
+          <Text style={[styles.backBtnText, { color: theme.primary }]}>← പിന്നോട്ട് (Back)</Text>
         </TouchableOpacity>
 
         {/* Header Area */}
         <View style={styles.headerArea}>
           <Text style={styles.iconEmoji}>👴</Text>
-          <Text style={styles.titleMalayalam}>നമസ്കാരം!</Text>
-          <Text style={styles.titleSub}>സഹായം വോയിസ് സഹായിയിലേക്ക് സ്വാഗതം</Text>
-          <Text style={styles.titleSubEn}>Welcome to Sahayam Voice Companion</Text>
+          <Text style={[styles.titleMalayalam, { color: theme.brandMalayalam }]}>നമസ്കാരം!</Text>
+          <Text style={[styles.titleSub, { color: theme.text }]}>സഹായം വോയിസ് സഹായിയിലേക്ക് സ്വാഗതം</Text>
+          <Text style={[styles.titleSubEn, { color: theme.textMuted }]}>Welcome to Sahayam Voice Companion</Text>
         </View>
 
         {/* Name / Profile Card */}
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>നിങ്ങളുടെ പേര് (Your Name):</Text>
+        <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+          <Text style={[styles.cardLabel, { color: theme.text }]}>നിങ്ങളുടെ പേര് (Your Name):</Text>
           <TextInput
-            style={styles.input}
+            style={[
+              styles.input,
+              {
+                backgroundColor: theme.inputBg,
+                borderColor: theme.inputBorder,
+                color: theme.inputText,
+              },
+            ]}
             value={elderName}
             onChangeText={setElderName}
             placeholder="നിങ്ങളുടെ പേര് ടൈപ്പ് ചെയ്യുക"
-            placeholderTextColor="#6B7280"
+            placeholderTextColor={theme.inputPlaceholder}
           />
-          <Text style={styles.hintText}>
+          <Text style={[styles.hintText, { color: theme.textMuted }]}>
             സ്നേഹത്തോടെ സംസാരിക്കാൻ നിങ്ങളുടെ പേര് ഓർത്തു വെക്കും.
           </Text>
         </View>
 
         {/* Big Start Button */}
         <TouchableOpacity
-          style={[styles.startBtn, loading && styles.btnDisabled]}
+          style={[styles.startBtn, { backgroundColor: theme.primary }, loading && styles.btnDisabled]}
           onPress={handleStart}
           disabled={loading}
           activeOpacity={0.85}
@@ -95,9 +104,9 @@ export default function ElderLoginScreen({ onLogin, onBack }: Props) {
         </TouchableOpacity>
 
         {/* Assistance Note */}
-        <View style={styles.assistanceNote}>
+        <View style={[styles.assistanceNote, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}>
           <Text style={styles.assistanceIcon}>💡</Text>
-          <Text style={styles.assistanceText}>
+          <Text style={[styles.assistanceText, { color: theme.textSecondary }]}>
             മൈക്രോഫോണിൽ തൊട്ട് മലയാളത്തിൽ സംസാരിച്ചാൽ സഹായം ഉടനടി മറുപടി നൽകും.
           </Text>
         </View>
@@ -109,7 +118,6 @@ export default function ElderLoginScreen({ onLogin, onBack }: Props) {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: "#0D0D1A",
     paddingHorizontal: 24,
     paddingTop: 50,
     paddingBottom: 36,
@@ -117,16 +125,13 @@ const styles = StyleSheet.create({
   },
   backBtn: {
     alignSelf: "flex-start",
-    backgroundColor: "#1A1A2E",
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#2A2A4A",
     marginBottom: 20,
   },
   backBtnText: {
-    color: "#A78BFA",
     fontSize: 14,
     fontWeight: "700",
   },
@@ -141,72 +146,65 @@ const styles = StyleSheet.create({
   titleMalayalam: {
     fontSize: 34,
     fontWeight: "800",
-    color: "#A78BFA",
     textAlign: "center",
     marginBottom: 8,
   },
   titleSub: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#E5E7EB",
     textAlign: "center",
     marginBottom: 4,
   },
   titleSubEn: {
     fontSize: 13,
-    color: "#9CA3AF",
     textAlign: "center",
   },
   card: {
-    backgroundColor: "#1A1A2E",
     borderRadius: 20,
     padding: 22,
     borderWidth: 1,
-    borderColor: "#6C63FF44",
     marginBottom: 24,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
   },
   cardLabel: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#D1D5DB",
     marginBottom: 10,
   },
   input: {
-    backgroundColor: "#0D0D1A",
     borderRadius: 14,
     paddingHorizontal: 18,
     paddingVertical: 14,
     fontSize: 18,
     fontWeight: "600",
-    color: "#F9FAFB",
     borderWidth: 1,
-    borderColor: "#4B5563",
     marginBottom: 10,
   },
   hintText: {
     fontSize: 13,
-    color: "#9CA3AF",
     lineHeight: 18,
   },
   startBtn: {
-    backgroundColor: "#6C63FF",
-    borderRadius: 24,
-    paddingVertical: 24,
-    paddingHorizontal: 20,
+    borderRadius: 22,
+    paddingVertical: 22,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#6C63FF",
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
-    marginBottom: 24,
+    shadowRadius: 10,
+    elevation: 6,
+    marginBottom: 20,
   },
   btnDisabled: {
-    opacity: 0.7,
+    opacity: 0.6,
   },
   startBtnIcon: {
-    fontSize: 32,
+    fontSize: 40,
     marginBottom: 6,
   },
   startBtnText: {
@@ -214,31 +212,26 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#FFFFFF",
     marginBottom: 2,
-    textAlign: "center",
   },
   startBtnSub: {
     fontSize: 14,
     fontWeight: "600",
     color: "#E0E7FF",
-    textAlign: "center",
   },
   assistanceNote: {
     flexDirection: "row",
-    backgroundColor: "#111827",
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#1F2937",
     alignItems: "center",
   },
   assistanceIcon: {
-    fontSize: 20,
+    fontSize: 22,
     marginRight: 12,
   },
   assistanceText: {
     flex: 1,
     fontSize: 13,
-    color: "#9CA3AF",
     lineHeight: 20,
   },
 });
