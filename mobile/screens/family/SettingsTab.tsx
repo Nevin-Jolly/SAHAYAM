@@ -12,6 +12,7 @@ import {
 import { setCareNoteDirect } from "../../services/companionService";
 import { useRole } from "../../context/RoleContext";
 import { BASE_URL } from "../../constants/api";
+import { useTheme } from "../../context/ThemeContext";
 
 /**
  * SettingsTab — Family Dashboard, Tab 4
@@ -34,6 +35,7 @@ export default function SettingsTab() {
   const [pingMs, setPingMs] = useState<number | null>(null);
   const [testingConn, setTestingConn] = useState(false);
   const { logout } = useRole();
+  const { theme, isDark, themeMode, setThemeMode } = useTheme();
 
   const checkConnection = async (isManual = false) => {
     if (isManual) setTestingConn(true);
@@ -103,24 +105,100 @@ export default function SettingsTab() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.background }]}>
       {/* Header */}
-      <Text style={styles.title}>Settings</Text>
-      <Text style={styles.subtitle}>App configuration & preferences</Text>
+      <Text style={[styles.title, { color: theme.text }]}>Settings</Text>
+      <Text style={[styles.subtitle, { color: theme.textMuted }]}>App configuration & preferences</Text>
+
+      {/* ── Theme / Appearance ─────────────────────────────────────────────────── */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: theme.primary, borderBottomColor: theme.border }]}>
+          🎨 ദൃശ്യരൂപം — Theme / Appearance
+        </Text>
+        <Text style={[styles.careNoteDesc, { color: theme.textMuted }]}>
+          ഇഷ്ടമുള്ള തീം തിരഞ്ഞെടുക്കുക (Select preferred display theme):
+        </Text>
+        <View style={styles.themeSelectorRow}>
+          <TouchableOpacity
+            style={[
+              styles.themeOptionBtn,
+              { backgroundColor: theme.cardSecondary, borderColor: theme.border },
+              themeMode === "dark" && [styles.themeOptionBtnActive, { backgroundColor: theme.primary, borderColor: theme.primaryLight }],
+            ]}
+            onPress={() => setThemeMode("dark")}
+            activeOpacity={0.8}
+            accessibilityLabel="Select Dark Theme"
+          >
+            <Text
+              style={[
+                styles.themeOptionText,
+                { color: theme.textSecondary },
+                themeMode === "dark" && { color: "#FFFFFF", fontWeight: "700" },
+              ]}
+            >
+              🌙 ഇരുണ്ടത് (Dark)
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.themeOptionBtn,
+              { backgroundColor: theme.cardSecondary, borderColor: theme.border },
+              themeMode === "light" && [styles.themeOptionBtnActive, { backgroundColor: theme.primary, borderColor: theme.primaryLight }],
+            ]}
+            onPress={() => setThemeMode("light")}
+            activeOpacity={0.8}
+            accessibilityLabel="Select Light Theme"
+          >
+            <Text
+              style={[
+                styles.themeOptionText,
+                { color: theme.textSecondary },
+                themeMode === "light" && { color: "#FFFFFF", fontWeight: "700" },
+              ]}
+            >
+              ☀️ വെളിച്ചം (Light)
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.themeOptionBtn,
+              { backgroundColor: theme.cardSecondary, borderColor: theme.border },
+              themeMode === "system" && [styles.themeOptionBtnActive, { backgroundColor: theme.primary, borderColor: theme.primaryLight }],
+            ]}
+            onPress={() => setThemeMode("system")}
+            activeOpacity={0.8}
+            accessibilityLabel="Select System Auto Theme"
+          >
+            <Text
+              style={[
+                styles.themeOptionText,
+                { color: theme.textSecondary },
+                themeMode === "system" && { color: "#FFFFFF", fontWeight: "700" },
+              ]}
+            >
+              ⚙️ സിസ്റ്റം (Auto)
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
       {/* ── Elder Connection & Multi-Phone Sync ───────────────────────────────── */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Elder Connection &amp; Phone Sync</Text>
+        <Text style={[styles.sectionTitle, { color: theme.primary, borderBottomColor: theme.border }]}>
+          Elder Connection &amp; Phone Sync
+        </Text>
         
         {/* Sync Status Badge */}
         <View
           style={[
             styles.syncStatusCard,
             connStatus === "connected"
-              ? styles.syncCardConnected
+              ? (isDark ? styles.syncCardConnected : { backgroundColor: "#ECFDF5", borderColor: "#10B981" })
               : connStatus === "disconnected"
-              ? styles.syncCardDisconnected
-              : styles.syncCardChecking,
+              ? (isDark ? styles.syncCardDisconnected : { backgroundColor: "#FEF2F2", borderColor: "#EF4444" })
+              : (isDark ? styles.syncCardChecking : { backgroundColor: "#EEF2FF", borderColor: "#6366F1" }),
           ]}
         >
           <View style={styles.syncStatusRow}>
@@ -134,7 +212,7 @@ export default function SettingsTab() {
                   : styles.dotChecking,
               ]}
             />
-            <Text style={styles.syncStatusTitle}>
+            <Text style={[styles.syncStatusTitle, { color: isDark ? "#F9FAFB" : "#0F172A" }]}>
               {connStatus === "connected"
                 ? "കണക്റ്റഡ് & സിൻക്രൊണൈസ്ഡ് (Synchronized)"
                 : connStatus === "disconnected"
@@ -142,59 +220,76 @@ export default function SettingsTab() {
                 : "പരിശോധിക്കുന്നു (Checking Sync…)"}
             </Text>
           </View>
-          <Text style={styles.syncStatusSub}>
+          <Text style={[styles.syncStatusSub, { color: isDark ? "#D1D5DB" : "#334155" }]}>
             {connStatus === "connected"
               ? `Mobile 1 (Elder) & Mobile 2 (Family) പരസ്പരം സിൻക് ചെയ്തിരിക്കുന്നു (${pingMs ?? "<10"}ms)`
               : `Companion Server (${BASE_URL}) റൺ ചെയ്യുന്നുണ്ടെന്ന് ഉറപ്പാക്കുക.`}
           </Text>
           <TouchableOpacity
-            style={styles.testConnBtn}
+            style={[styles.testConnBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
             onPress={() => checkConnection(true)}
             disabled={testingConn}
           >
             {testingConn ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <ActivityIndicator size="small" color={theme.primary} />
             ) : (
-              <Text style={styles.testConnBtnText}>⚡ സിൻക് കണക്ഷൻ പരിശോധിക്കുക (Test Ping)</Text>
+              <Text style={[styles.testConnBtnText, { color: theme.primary }]}>⚡ സിൻക് കണക്ഷൻ പരിശോധിക്കുക (Test Ping)</Text>
             )}
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.inputLabel}>Elder ID</Text>
+        <Text style={[styles.inputLabel, { color: theme.textMuted }]}>Elder ID</Text>
         <TextInput
-          style={styles.input}
+          style={[
+            styles.input,
+            {
+              backgroundColor: theme.inputBg,
+              borderColor: theme.inputBorder,
+              color: theme.inputText,
+            },
+          ]}
           value={elderId}
           onChangeText={setElderId}
           placeholder="e.g. elder_demo_001"
-          placeholderTextColor="#4B5563"
+          placeholderTextColor={theme.inputPlaceholder}
           autoCapitalize="none"
           accessibilityLabel="Elder ID input"
         />
-        <Text style={styles.inputHint}>
+        <Text style={[styles.inputHint, { color: theme.textSubtle }]}>
           ഇത് ഏത് മുതിർന്ന വ്യക്തിയുടെ വിവരങ്ങളാണ് കാണിക്കുന്നത് എന്ന് നിർണ്ണയിക്കുന്നു.
         </Text>
       </View>
 
       {/* ── Phase 7: Morning Care Note (Social Bridging) ──────────────── */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>💛 സ്നേഹസന്ദേശം — Family Care Note</Text>
-        <Text style={styles.careNoteDesc}>
+        <Text style={[styles.sectionTitle, { color: theme.primary, borderBottomColor: theme.border }]}>
+          💛 സ്നേഹസന്ദേശം — Family Care Note
+        </Text>
+        <Text style={[styles.careNoteDesc, { color: theme.textMuted }]}>
           മുതിർന്നവർക്കായി ഒരു ചെറിയ സ്നേഹസന്ദേശം എഴുതുക. അടുത്ത സംഭാഷണത്തിൽ സഹായം ഇത് സ്നേഹത്തോടെ അറിയിക്കും.
         </Text>
         <TextInput
-          style={[styles.input, styles.careNoteInput]}
+          style={[
+            styles.input,
+            styles.careNoteInput,
+            {
+              backgroundColor: theme.inputBg,
+              borderColor: theme.inputBorder,
+              color: theme.inputText,
+            },
+          ]}
           value={careNote}
           onChangeText={(t) => {
             setCareNote(t);
             setCareNoteResult(null);
           }}
           placeholder="ഉദാഹരണത്തിന്: മരുന്ന് കൃത്യസമയത്ത് കഴിക്കണം, വൈകുന്നേരം വിളിക്കാം..."
-          placeholderTextColor="#4B5563"
+          placeholderTextColor={theme.inputPlaceholder}
           multiline
           maxLength={280}
           accessibilityLabel="Morning care note input"
         />
-        <Text style={styles.charCount}>{careNote.length}/280</Text>
+        <Text style={[styles.charCount, { color: theme.textSubtle }]}>{careNote.length}/280</Text>
         <TouchableOpacity
           style={[styles.primaryBtn, styles.careNoteBtn, careNoteSaving && styles.primaryBtnDisabled]}
           onPress={handleSaveCareNote}
@@ -206,24 +301,24 @@ export default function SettingsTab() {
           </Text>
         </TouchableOpacity>
         {careNoteResult && (
-          <Text style={styles.successText}>{careNoteResult}</Text>
+          <Text style={[styles.successText, { color: theme.success }]}>{careNoteResult}</Text>
         )}
       </View>
 
-
-
       {/* ── Privacy ───────────────────────────────────────────────────────────── */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Privacy</Text>
-        <View style={styles.privacyCard}>
+        <Text style={[styles.sectionTitle, { color: theme.primary, borderBottomColor: theme.border }]}>
+          Privacy
+        </Text>
+        <View style={[styles.privacyCard, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}>
           <Text style={styles.privacyIcon}>🔒</Text>
           <View style={styles.privacyText}>
-            <Text style={styles.privacyTitle}>Conversation History</Text>
-            <Text style={styles.privacyDesc}>
+            <Text style={[styles.privacyTitle, { color: theme.text }]}>Conversation History</Text>
+            <Text style={[styles.privacyDesc, { color: theme.textMuted }]}>
               The elder's voice conversations with SAHAYAM are private and are
               not accessible from the family dashboard.
             </Text>
-            <Text style={styles.privacyDesc}>
+            <Text style={[styles.privacyDesc, { color: theme.textMuted }]}>
               Family can see: check-in status, medication schedules, and
               escalation alerts only.
             </Text>
@@ -233,24 +328,28 @@ export default function SettingsTab() {
 
       {/* ── Session & Role Switch ─────────────────────────────────────────────── */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Session &amp; Role</Text>
+        <Text style={[styles.sectionTitle, { color: theme.primary, borderBottomColor: theme.border }]}>
+          Session &amp; Role
+        </Text>
         <TouchableOpacity
-          style={styles.switchRoleCard}
+          style={[styles.switchRoleCard, { backgroundColor: theme.cardHighlight, borderColor: theme.primaryLight }]}
           onPress={logout}
           accessibilityLabel="Switch Role or Log Out"
         >
-          <Text style={styles.switchRoleCardText}>🔄 റോൾ മാറ്റുക / Switch Role</Text>
-          <Text style={styles.switchRoleCardSub}>Return to role selector (Elder / Family)</Text>
+          <Text style={[styles.switchRoleCardText, { color: theme.primary }]}>🔄 റോൾ മാറ്റുക / Switch Role</Text>
+          <Text style={[styles.switchRoleCardSub, { color: theme.textMuted }]}>Return to role selector (Elder / Family)</Text>
         </TouchableOpacity>
       </View>
 
       {/* ── App Info ──────────────────────────────────────────────────────────── */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>About</Text>
-        <View style={styles.aboutCard}>
-          <Text style={styles.aboutName}>SAHAYAM</Text>
-          <Text style={styles.aboutDesc}>An AI comapanion for elder people
-
+        <Text style={[styles.sectionTitle, { color: theme.primary, borderBottomColor: theme.border }]}>
+          About
+        </Text>
+        <View style={[styles.aboutCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+          <Text style={[styles.aboutName, { color: theme.primary }]}>SAHAYAM</Text>
+          <Text style={[styles.aboutDesc, { color: theme.textMuted }]}>
+            An AI companion for elderly care
           </Text>
         </View>
       </View>
@@ -462,5 +561,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: "#A78BFA",
+  },
+  themeSelectorRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 8,
+    flexWrap: "wrap",
+  },
+  themeOptionBtn: {
+    flex: 1,
+    minWidth: 95,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  themeOptionBtnActive: {
+    borderWidth: 1.5,
+    elevation: 2,
+  },
+  themeOptionText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
 });

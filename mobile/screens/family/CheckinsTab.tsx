@@ -22,6 +22,7 @@ import {
   updateDoc,
   serverTimestamp,
 } from "firebase/firestore";
+import { useTheme } from "../../context/ThemeContext";
 
 /**
  * CheckinsTab — Family Dashboard, Tab 3
@@ -317,15 +318,16 @@ export default function CheckinsTab() {
 
   const openEscalations = escalations.filter((e) => !e.resolved);
   const resolvedEscalations = escalations.filter((e) => e.resolved);
+  const { theme, isDark } = useTheme();
 
   return (
     <ScrollView
-      contentContainerStyle={styles.container}
+      contentContainerStyle={[styles.container, { backgroundColor: theme.background }]}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
           onRefresh={onRefresh}
-          tintColor="#6C63FF"
+          tintColor={theme.primary}
         />
       }
     >
@@ -333,42 +335,51 @@ export default function CheckinsTab() {
       <View style={styles.headerRow}>
         <View>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Text style={styles.title}>Check-ins & Alerts</Text>
+            <Text style={[styles.title, { color: theme.text }]}>Check-ins & Alerts</Text>
             {syncing && (
               <ActivityIndicator
                 size="small"
-                color="#6C63FF"
+                color={theme.primary}
                 style={{ marginLeft: 8 }}
               />
             )}
           </View>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.subtitle, { color: theme.textMuted }]}>
             {syncing ? "⚡ Syncing live history…" : "Daily welfare check-ins & escalation logs"}
           </Text>
         </View>
         {openEscalations.length > 0 && (
-          <View style={styles.alertBadge}>
-            <Text style={styles.alertBadgeText}>{openEscalations.length} open</Text>
+          <View style={[styles.alertBadge, { backgroundColor: theme.dangerBg, borderColor: theme.dangerBorder }]}>
+            <Text style={[styles.alertBadgeText, { color: theme.danger }]}>{openEscalations.length} open</Text>
           </View>
         )}
       </View>
 
       {/* ── Open Escalations ─────────────────────────────────────────────────── */}
-      <Text style={styles.sectionTitle}>
+      <Text style={[styles.sectionTitle, { color: theme.primary }]}>
         🚨 Open Escalations ({openEscalations.length})
       </Text>
 
       {openEscalations.length === 0 && (
-        <View style={styles.emptyRow}>
-          <Text style={styles.emptyText}>✓ No open escalations</Text>
+        <View style={[styles.emptyRow, { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }]}>
+          <Text style={[styles.emptyText, { color: theme.textMuted }]}>✓ No open escalations</Text>
         </View>
       )}
 
       {openEscalations.map((esc) => (
-        <View key={esc.id} style={styles.escalationCard}>
+        <View
+          key={esc.id}
+          style={[
+            styles.escalationCard,
+            {
+              backgroundColor: theme.dangerBg,
+              borderColor: theme.dangerBorder,
+            },
+          ]}
+        >
           <View style={styles.escalationTop}>
             <View style={styles.escalationLeft}>
-              <Text style={styles.escalationReason}>
+              <Text style={[styles.escalationReason, { color: theme.danger }]}>
                 {esc.reason === "missed_medication"
                   ? "💊 Missed Medication Check-in"
                   : esc.reason === "unanswered_checkin"
@@ -379,17 +390,18 @@ export default function CheckinsTab() {
                   ? "Manual Alert"
                   : esc.reason}
               </Text>
-              <Text style={styles.escalationTime}>
+              <Text style={[styles.escalationTime, { color: theme.textSecondary }]}>
                 Triggered: {formatTime(esc.triggered_at)}
               </Text>
-              <Text style={styles.escalationNotified}>
+              <Text style={[styles.escalationNotified, { color: theme.textMuted }]}>
                 Family notified: {esc.family_notified ? "Yes ✓" : "Pending"}
               </Text>
-              {esc.notes ? <Text style={styles.notesText}>{esc.notes}</Text> : null}
+              {esc.notes ? <Text style={[styles.notesText, { color: theme.textSecondary }]}>{esc.notes}</Text> : null}
             </View>
             <TouchableOpacity
               style={[
                 styles.resolveBtn,
+                { backgroundColor: theme.card, borderColor: theme.primary },
                 resolvingId === esc.id && styles.resolveBtnDisabled,
               ]}
               onPress={() => handleResolve(esc)}
@@ -397,9 +409,9 @@ export default function CheckinsTab() {
               accessibilityLabel={`Resolve escalation from ${esc.triggered_at}`}
             >
               {resolvingId === esc.id ? (
-                <ActivityIndicator size="small" color="#6C63FF" />
+                <ActivityIndicator size="small" color={theme.primary} />
               ) : (
-                <Text style={styles.resolveBtnText}>Resolve</Text>
+                <Text style={[styles.resolveBtnText, { color: theme.primary }]}>Resolve</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -409,12 +421,22 @@ export default function CheckinsTab() {
       {/* ── Resolved Escalations ─────────────────────────────────────────────── */}
       {resolvedEscalations.length > 0 && (
         <>
-          <Text style={[styles.sectionTitle, { marginTop: 20 }]}>
+          <Text style={[styles.sectionTitle, { color: theme.primary, marginTop: 20 }]}>
             ✓ Resolved Escalations ({resolvedEscalations.length})
           </Text>
           {resolvedEscalations.map((esc) => (
-            <View key={esc.id} style={[styles.escalationCard, styles.resolvedCard]}>
-              <Text style={styles.resolvedReason}>
+            <View
+              key={esc.id}
+              style={[
+                styles.escalationCard,
+                styles.resolvedCard,
+                {
+                  backgroundColor: theme.successBg,
+                  borderColor: theme.successBorder,
+                },
+              ]}
+            >
+              <Text style={[styles.resolvedReason, { color: theme.success }]}>
                 {esc.reason === "missed_medication"
                   ? "💊 Missed Medication (Resolved)"
                   : esc.reason === "unanswered_checkin"
@@ -423,7 +445,7 @@ export default function CheckinsTab() {
                   ? "Elder SOS Emergency"
                   : esc.reason}
               </Text>
-              <Text style={styles.resolvedTime}>
+              <Text style={[styles.resolvedTime, { color: theme.textMuted }]}>
                 {formatTime(esc.triggered_at)} → Resolved {formatTime(esc.resolved_at)}
               </Text>
             </View>
@@ -432,18 +454,27 @@ export default function CheckinsTab() {
       )}
 
       {/* ── Check-in History ─────────────────────────────────────────────────── */}
-      <Text style={[styles.sectionTitle, { marginTop: 24 }]}>
+      <Text style={[styles.sectionTitle, { color: theme.primary, marginTop: 24 }]}>
         📋 Check-in History ({checkins.length})
       </Text>
 
       {checkins.length === 0 && (
-        <View style={styles.emptyRow}>
-          <Text style={styles.emptyText}>No check-ins recorded yet</Text>
+        <View style={[styles.emptyRow, { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }]}>
+          <Text style={[styles.emptyText, { color: theme.textMuted }]}>No check-ins recorded yet</Text>
         </View>
       )}
 
       {checkins.map((c) => (
-        <View key={c.id} style={styles.checkinRow}>
+        <View
+          key={c.id}
+          style={[
+            styles.checkinRow,
+            {
+              backgroundColor: theme.card,
+              borderColor: theme.cardBorder,
+            },
+          ]}
+        >
           <View
             style={[
               styles.checkinDot,
@@ -457,13 +488,13 @@ export default function CheckinsTab() {
               {c.status.charAt(0).toUpperCase() + c.status.slice(1)}
               {c.escalation_triggered ? " ⚠" : ""}
             </Text>
-            <Text style={styles.checkinTime}>{formatTime(c.timestamp)}</Text>
+            <Text style={[styles.checkinTime, { color: theme.textSecondary }]}>{formatTime(c.timestamp)}</Text>
             {c.responded_at && (
-              <Text style={styles.checkinResponded}>
+              <Text style={[styles.checkinResponded, { color: theme.success }]}>
                 Responded: {formatTime(c.responded_at)}
               </Text>
             )}
-            {c.notes ? <Text style={styles.checkinNotes}>{c.notes}</Text> : null}
+            {c.notes ? <Text style={[styles.checkinNotes, { color: theme.textSecondary }]}>{c.notes}</Text> : null}
           </View>
         </View>
       ))}

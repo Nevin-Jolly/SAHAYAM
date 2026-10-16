@@ -3,11 +3,16 @@ import React from "react";
 import { LogBox } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import RootNavigator from "./navigation/RootNavigator";
+import { ThemeProvider } from "./context/ThemeContext";
 
-// Ignore benign React Native Blob and development warnings
+// Ignore benign development warnings & background sync notices
 LogBox.ignoreLogs([
   "Response.blob() is using React Native's Blob",
   "Require cycle:",
+  "Companion server resolve warning:",
+  "Companion server",
+  "fetch failed",
+  "Fetch request has been canceled",
 ]);
 
 /**
@@ -21,7 +26,10 @@ LogBox.ignoreLogs([
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <RootNavigator />
+      <ThemeProvider>
+        <RootNavigator />
+      </ThemeProvider>
     </GestureHandlerRootView>
   );
 }
+

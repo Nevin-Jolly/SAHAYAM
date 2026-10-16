@@ -7,6 +7,7 @@ import {
   StatusBar,
   ScrollView,
 } from "react-native";
+import { useTheme } from "../context/ThemeContext";
 
 interface Props {
   onSelectElder: () => void;
@@ -20,16 +21,52 @@ interface Props {
  *   2. Dedicated Family Member Login Page
  */
 export default function LoginScreen({ onSelectElder, onSelectFamily }: Props) {
+  const { theme, isDark, toggleTheme } = useTheme();
+
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0D0D1A" />
+    <ScrollView
+      contentContainerStyle={[
+        styles.container,
+        { backgroundColor: theme.background },
+      ]}
+    >
+      <StatusBar
+        barStyle={theme.statusBarStyle}
+        backgroundColor={theme.statusBarBg}
+      />
+
+      {/* Top Bar with Theme Toggle */}
+      <View style={styles.topRow}>
+        <View style={{ flex: 1 }} />
+        <TouchableOpacity
+          style={[
+            styles.themeToggleBtn,
+            {
+              backgroundColor: theme.card,
+              borderColor: theme.border,
+            },
+          ]}
+          onPress={toggleTheme}
+          activeOpacity={0.75}
+          accessibilityLabel="Toggle Light/Dark Theme"
+          accessibilityRole="button"
+        >
+          <Text style={[styles.themeToggleText, { color: theme.textSecondary }]}>
+            {isDark ? "☀️ Light" : "🌙 Dark"}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Brand Header */}
       <View style={styles.logoArea}>
         <Text style={styles.logoEmoji}>🤝</Text>
-        <Text style={styles.appName}>സഹായം</Text>
-        <Text style={styles.appNameEn}>SAHAYAM</Text>
-        <Text style={styles.tagline}>
+        <Text style={[styles.appName, { color: theme.brandMalayalam }]}>
+          സഹായം
+        </Text>
+        <Text style={[styles.appNameEn, { color: theme.brandEnglish }]}>
+          SAHAYAM
+        </Text>
+        <Text style={[styles.tagline, { color: theme.textMuted }]}>
           മുതിർന്നവർക്കായുള്ള മലയാളം വോയിസ് സഹായി{"\n"}
           (Malayalam Voice Companion for Elderly Care)
         </Text>
@@ -37,11 +74,19 @@ export default function LoginScreen({ onSelectElder, onSelectFamily }: Props) {
 
       {/* Role Selection Prompt */}
       <View style={styles.roleArea}>
-        <Text style={styles.prompt}>പ്രവേശന മാർഗ്ഗം തിരഞ്ഞെടുക്കുക (Select Role):</Text>
+        <Text style={[styles.prompt, { color: theme.textSecondary }]}>
+          പ്രവേശന മാർഗ്ഗം തിരഞ്ഞെടുക്കുക (Select Role):
+        </Text>
 
         {/* Elder Entry Card */}
         <TouchableOpacity
-          style={[styles.roleBtn, styles.elderBtn]}
+          style={[
+            styles.roleBtn,
+            {
+              backgroundColor: theme.elderCardBg,
+              borderColor: theme.elderCardBorder,
+            },
+          ]}
           onPress={onSelectElder}
           activeOpacity={0.85}
           accessibilityLabel="Elder portal"
@@ -50,18 +95,33 @@ export default function LoginScreen({ onSelectElder, onSelectFamily }: Props) {
           <View style={styles.roleBtnHeader}>
             <Text style={styles.roleBtnIcon}>👴</Text>
             <View style={styles.roleBtnTextContainer}>
-              <Text style={styles.roleBtnTitle}>മുതിർന്ന വ്യക്തി (Elder)</Text>
-              <Text style={styles.roleBtnSub}>
+              <Text style={[styles.roleBtnTitle, { color: theme.elderCardTitle }]}>
+                മുതിർന്ന വ്യക്തി (Elder)
+              </Text>
+              <Text style={[styles.roleBtnSub, { color: theme.textMuted }]}>
                 വോയിസ് സഹായി ഉപയോഗിച്ച് സംസാരിക്കാം
               </Text>
-              <Text style={styles.roleBtnAction}>തുടങ്ങാൻ ഇവിടെ തൊടുക →</Text>
+              <Text
+                style={[
+                  styles.roleBtnAction,
+                  { color: theme.elderCardAction },
+                ]}
+              >
+                തുടങ്ങാൻ ഇവിടെ തൊടുക →
+              </Text>
             </View>
           </View>
         </TouchableOpacity>
 
         {/* Family Entry Card */}
         <TouchableOpacity
-          style={[styles.roleBtn, styles.familyBtn]}
+          style={[
+            styles.roleBtn,
+            {
+              backgroundColor: theme.familyCardBg,
+              borderColor: theme.familyCardBorder,
+            },
+          ]}
           onPress={onSelectFamily}
           activeOpacity={0.85}
           accessibilityLabel="Family caregiver portal"
@@ -70,11 +130,18 @@ export default function LoginScreen({ onSelectElder, onSelectFamily }: Props) {
           <View style={styles.roleBtnHeader}>
             <Text style={styles.roleBtnIcon}>👨‍👩‍👦</Text>
             <View style={styles.roleBtnTextContainer}>
-              <Text style={styles.roleBtnTitle}>കുടുംബാംഗം (Family Member)</Text>
-              <Text style={styles.roleBtnSub}>
+              <Text style={[styles.roleBtnTitle, { color: theme.familyCardTitle }]}>
+                കുടുംബാംഗം (Family Member)
+              </Text>
+              <Text style={[styles.roleBtnSub, { color: theme.textMuted }]}>
                 ആരോഗ്യവും മരുന്നുകളും നിരീക്ഷിക്കാം
               </Text>
-              <Text style={[styles.roleBtnAction, styles.familyActionText]}>
+              <Text
+                style={[
+                  styles.roleBtnAction,
+                  { color: theme.familyCardAction },
+                ]}
+              >
                 ഡാഷ്‌ബോർഡിലേക്ക് പോകുക →
               </Text>
             </View>
@@ -83,15 +150,25 @@ export default function LoginScreen({ onSelectElder, onSelectFamily }: Props) {
       </View>
 
       {/* Privacy Notice */}
-      <View style={styles.privacyNote}>
+      <View
+        style={[
+          styles.privacyNote,
+          {
+            backgroundColor: theme.cardSecondary,
+            borderColor: theme.cardBorder,
+          },
+        ]}
+      >
         <Text style={styles.privacyIcon}>🔒</Text>
-        <Text style={styles.privacyText}>
+        <Text style={[styles.privacyText, { color: theme.textMuted }]}>
           മുതിർന്നവരുടെ സംഭാഷണങ്ങൾ തികച്ചും സ്വകാര്യമാണ്. കുടുംബാംഗങ്ങൾക്ക് ഇത് കേൾക്കാൻ സാധിക്കില്ല.
         </Text>
       </View>
 
       {/* Academic Footer */}
-      <Text style={styles.footer}>KTU B.Tech Capstone CSD415 · Group 9</Text>
+      <Text style={[styles.footer, { color: theme.textSubtle }]}>
+        KTU B.Tech Capstone CSD415 · Group 9
+      </Text>
     </ScrollView>
   );
 }
@@ -99,66 +176,79 @@ export default function LoginScreen({ onSelectElder, onSelectFamily }: Props) {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: "#0D0D1A",
     paddingHorizontal: 22,
-    paddingTop: 48,
+    paddingTop: 40,
     paddingBottom: 28,
     justifyContent: "space-between",
   },
+  topRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  themeToggleBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  themeToggleText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
   logoArea: {
     alignItems: "center",
-    paddingTop: 12,
+    paddingTop: 4,
   },
   logoEmoji: {
-    fontSize: 56,
+    fontSize: 54,
     marginBottom: 8,
   },
   appName: {
     fontSize: 38,
     fontWeight: "800",
-    color: "#A78BFA",
     textAlign: "center",
     marginBottom: 2,
   },
   appNameEn: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#6B7280",
     textAlign: "center",
     letterSpacing: 2, // Low letterSpacing avoids Android right-edge clipping of 'M'
     marginBottom: 10,
   },
   tagline: {
     fontSize: 13,
-    color: "#9CA3AF",
     textAlign: "center",
     lineHeight: 20,
     paddingHorizontal: 8,
   },
   roleArea: {
     gap: 16,
-    marginVertical: 20,
+    marginVertical: 18,
   },
   prompt: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#D1D5DB",
     textAlign: "center",
-    marginBottom: 6,
+    marginBottom: 4,
   },
   roleBtn: {
     borderRadius: 22,
     paddingVertical: 20,
     paddingHorizontal: 18,
     borderWidth: 2,
-  },
-  elderBtn: {
-    backgroundColor: "#16162C",
-    borderColor: "#6C63FF",
-  },
-  familyBtn: {
-    backgroundColor: "#11221A",
-    borderColor: "#10B981",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
   },
   roleBtnHeader: {
     flexDirection: "row",
@@ -174,30 +264,22 @@ const styles = StyleSheet.create({
   roleBtnTitle: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#F9FAFB",
     marginBottom: 4,
   },
   roleBtnSub: {
     fontSize: 13,
-    color: "#9CA3AF",
     marginBottom: 6,
     lineHeight: 18,
   },
   roleBtnAction: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#A78BFA",
-  },
-  familyActionText: {
-    color: "#34D399",
   },
   privacyNote: {
     flexDirection: "row",
-    backgroundColor: "#111827",
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: "#1F2937",
     alignItems: "flex-start",
     marginTop: 10,
   },
@@ -209,12 +291,10 @@ const styles = StyleSheet.create({
   privacyText: {
     flex: 1,
     fontSize: 12,
-    color: "#6B7280",
     lineHeight: 18,
   },
   footer: {
     textAlign: "center",
-    color: "#4B5563",
     fontSize: 11,
     marginTop: 14,
   },

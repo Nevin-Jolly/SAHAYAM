@@ -28,6 +28,7 @@ import {
 } from "../../services/medicationService";
 import { createAudioPlayer } from "expo-audio";
 import { getMalayalamAudioUri } from "../../services/companionService";
+import { useTheme } from "../../context/ThemeContext";
 
 const ELDER_ID = "elder_demo_001";
 
@@ -37,6 +38,7 @@ export default function MedicationsTab() {
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
+  const { theme, isDark } = useTheme();
 
   // Time adjuster states
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>("preset_morning");
@@ -223,28 +225,28 @@ export default function MedicationsTab() {
   return (
     <>
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[styles.container, { backgroundColor: theme.background }]}
         keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor="#6C63FF"
+            tintColor={theme.primary}
           />
         }
       >
         {/* Header */}
         <View style={styles.headerRow}>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.title} numberOfLines={1}>
+            <Text style={[styles.title, { color: theme.text }]} numberOfLines={1}>
               Medications
             </Text>
-            <Text style={styles.subtitle}>
+            <Text style={[styles.subtitle, { color: theme.textMuted }]}>
               {medications.length} medication{medications.length !== 1 ? "s" : ""} scheduled
             </Text>
           </View>
           <TouchableOpacity
-            style={styles.addBtn}
+            style={[styles.addBtn, { backgroundColor: theme.primary }]}
             onPress={() => setModalVisible(true)}
             activeOpacity={0.8}
             accessibilityLabel="Add medication"
@@ -254,42 +256,49 @@ export default function MedicationsTab() {
         </View>
 
         {medications.length === 0 ? (
-          <View style={styles.emptyBox}>
+          <View style={[styles.emptyBox, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
             <Text style={styles.emptyIcon}>💊</Text>
-            <Text style={styles.emptyText}>No medications scheduled</Text>
-            <Text style={styles.emptySub}>
+            <Text style={[styles.emptyText, { color: theme.text }]}>No medications scheduled</Text>
+            <Text style={[styles.emptySub, { color: theme.primary }]}>
               Tap "+ Add Medication" above to create a schedule
             </Text>
           </View>
         ) : null}
 
         {medications.map((med) => (
-          <View key={med.id} style={[styles.medCard, !med.active && styles.medCardInactive]}>
+          <View
+            key={med.id}
+            style={[
+              styles.medCard,
+              { backgroundColor: theme.card, borderColor: theme.cardBorder },
+              !med.active && styles.medCardInactive,
+            ]}
+          >
             <View style={styles.medCardTop}>
               <View style={styles.medInfo}>
                 <View style={styles.medNameRow}>
-                  <Text style={[styles.medName, !med.active && styles.medNameInactive]}>
+                  <Text style={[styles.medName, { color: theme.text }, !med.active && styles.medNameInactive]}>
                     {med.name}
                   </Text>
-                  <View style={styles.dosageBadge}>
-                    <Text style={styles.dosageBadgeText}>{med.dosage}</Text>
+                  <View style={[styles.dosageBadge, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}>
+                    <Text style={[styles.dosageBadgeText, { color: theme.primary }]}>{med.dosage}</Text>
                   </View>
                 </View>
 
                 {med.instructions ? (
-                  <Text style={styles.medInstructions}>📋 {med.instructions}</Text>
+                  <Text style={[styles.medInstructions, { color: theme.textSecondary }]}>📋 {med.instructions}</Text>
                 ) : null}
-                <Text style={styles.medCron}>⏰ {med.time_label || med.time_str || "Scheduled"}</Text>
+                <Text style={[styles.medCron, { color: theme.primary }]}>⏰ {med.time_label || med.time_str || "Scheduled"}</Text>
               </View>
 
               <View style={styles.medActions}>
                 <Switch
                   value={med.active}
                   onValueChange={() => handleToggleActive(med)}
-                  trackColor={{ false: "#374151", true: "#4F46E5" }}
-                  thumbColor={med.active ? "#6C63FF" : "#9CA3AF"}
+                  trackColor={{ false: isDark ? "#374151" : "#CBD5E1", true: theme.primaryLight }}
+                  thumbColor={med.active ? theme.primary : (isDark ? "#9CA3AF" : "#64748B")}
                 />
-                <Text style={styles.activeLabel}>
+                <Text style={[styles.activeLabel, { color: theme.textMuted }]}>
                   {med.active ? "Active" : "Paused"}
                 </Text>
               </View>
@@ -297,19 +306,19 @@ export default function MedicationsTab() {
 
             <View style={styles.cardBottomRow}>
               <TouchableOpacity
-                style={styles.testVoiceBtn}
+                style={[styles.testVoiceBtn, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}
                 onPress={() => handleTestVoice(med)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.testVoiceBtnText}>🔊 Test Voice Reminder</Text>
+                <Text style={[styles.testVoiceBtnText, { color: theme.primary }]}>🔊 Test Voice Reminder</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.deleteBtn}
+                style={[styles.deleteBtn, { backgroundColor: theme.dangerBg, borderColor: theme.dangerBorder }]}
                 onPress={() => handleDelete(med)}
                 accessibilityLabel={`Delete ${med.name}`}
               >
-                <Text style={styles.deleteBtnText}>Delete</Text>
+                <Text style={[styles.deleteBtnText, { color: theme.danger }]}>Delete</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -324,50 +333,69 @@ export default function MedicationsTab() {
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
             <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalTitle}>Add Medication Schedule</Text>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Add Medication Schedule</Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Text style={styles.modalCloseText}>✕</Text>
+                <Text style={[styles.modalCloseText, { color: theme.textMuted }]}>✕</Text>
               </TouchableOpacity>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={styles.inputLabel}>Medication Name *</Text>
+              <Text style={[styles.inputLabel, { color: theme.textMuted }]}>Medication Name *</Text>
               <TextInput
-                style={styles.input}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.inputBg,
+                    borderColor: theme.inputBorder,
+                    color: theme.inputText,
+                  },
+                ]}
                 placeholder="e.g. Metformin, Paracetamol"
-                placeholderTextColor="#6B7280"
+                placeholderTextColor={theme.inputPlaceholder}
                 value={form.name}
                 onChangeText={(v) => setForm((f) => ({ ...f, name: v }))}
                 accessibilityLabel="Medication name input"
               />
 
-              <Text style={styles.inputLabel}>Dosage *</Text>
+              <Text style={[styles.inputLabel, { color: theme.textMuted }]}>Dosage *</Text>
               <TextInput
-                style={styles.input}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.inputBg,
+                    borderColor: theme.inputBorder,
+                    color: theme.inputText,
+                  },
+                ]}
                 placeholder="e.g. 500mg, 1 tablet"
-                placeholderTextColor="#6B7280"
+                placeholderTextColor={theme.inputPlaceholder}
                 value={form.dosage}
                 onChangeText={(v) => setForm((f) => ({ ...f, dosage: v }))}
                 accessibilityLabel="Dosage input"
               />
 
-              <Text style={styles.inputLabel}>Quick Time Presets</Text>
+              <Text style={[styles.inputLabel, { color: theme.textMuted }]}>Quick Time Presets</Text>
               <View style={styles.cronOptions}>
                 {PRESET_TIMES.map((opt) => {
                   const isSelected = selectedPresetId === opt.id;
                   return (
                     <TouchableOpacity
                       key={opt.id}
-                      style={[styles.cronOption, isSelected && styles.cronOptionSelected]}
+                      style={[
+                        styles.cronOption,
+                        { backgroundColor: theme.cardSecondary, borderColor: theme.border },
+                        isSelected && [styles.cronOptionSelected, { backgroundColor: theme.primary, borderColor: theme.primaryLight }],
+                      ]}
                       onPress={() => handleSelectPreset(opt)}
                       activeOpacity={0.8}
                     >
                       <Text
                         style={[
                           styles.cronOptionText,
-                          isSelected && styles.cronOptionTextSelected,
+                          { color: theme.textSecondary },
+                          isSelected && [styles.cronOptionTextSelected, { color: "#FFFFFF" }],
                         ]}
                       >
                         {opt.label}
@@ -378,10 +406,10 @@ export default function MedicationsTab() {
               </View>
 
               {/* Interactive Adjustable Time Picker */}
-              <View style={styles.timeAdjustCard}>
+              <View style={[styles.timeAdjustCard, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}>
                 <View style={styles.timeAdjustHeader}>
-                  <Text style={styles.timeAdjustTitle}>⏰ Adjust Schedule Time</Text>
-                  <Text style={styles.timeAdjustSubtitle}>
+                  <Text style={[styles.timeAdjustTitle, { color: theme.text }]}>⏰ Adjust Schedule Time</Text>
+                  <Text style={[styles.timeAdjustSubtitle, { color: theme.textMuted }]}>
                     Tap ▲ / ▼ to set exact hour & minute, or toggle AM / PM
                   </Text>
                 </View>
@@ -389,72 +417,92 @@ export default function MedicationsTab() {
                 <View style={styles.timePickerRow}>
                   {/* Hour Stepper */}
                   <View style={styles.pickerColumn}>
-                    <Text style={styles.pickerColLabel}>HOUR</Text>
+                    <Text style={[styles.pickerColLabel, { color: theme.textMuted }]}>HOUR</Text>
                     <TouchableOpacity
-                      style={styles.stepBtn}
+                      style={[styles.stepBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
                       onPress={() => handleStepHour(1)}
                       activeOpacity={0.7}
                       accessibilityLabel="Increment Hour"
                     >
-                      <Text style={styles.stepBtnText}>▲</Text>
+                      <Text style={[styles.stepBtnText, { color: theme.text }]}>▲</Text>
                     </TouchableOpacity>
-                    <View style={styles.timeDisplayBox}>
-                      <Text style={styles.timeDisplayText}>{String(hour12).padStart(2, "0")}</Text>
+                    <View style={[styles.timeDisplayBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                      <Text style={[styles.timeDisplayText, { color: theme.text }]}>{String(hour12).padStart(2, "0")}</Text>
                     </View>
                     <TouchableOpacity
-                      style={styles.stepBtn}
+                      style={[styles.stepBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
                       onPress={() => handleStepHour(-1)}
                       activeOpacity={0.7}
                       accessibilityLabel="Decrement Hour"
                     >
-                      <Text style={styles.stepBtnText}>▼</Text>
+                      <Text style={[styles.stepBtnText, { color: theme.text }]}>▼</Text>
                     </TouchableOpacity>
                   </View>
 
-                  <Text style={styles.timeColon}>:</Text>
+                  <Text style={[styles.timeColon, { color: theme.text }]}>:</Text>
 
                   {/* Minute Stepper */}
                   <View style={styles.pickerColumn}>
-                    <Text style={styles.pickerColLabel}>MINUTE</Text>
+                    <Text style={[styles.pickerColLabel, { color: theme.textMuted }]}>MINUTE</Text>
                     <TouchableOpacity
-                      style={styles.stepBtn}
+                      style={[styles.stepBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
                       onPress={() => handleStepMinute(5)}
                       activeOpacity={0.7}
                       accessibilityLabel="Increment Minute"
                     >
-                      <Text style={styles.stepBtnText}>▲</Text>
+                      <Text style={[styles.stepBtnText, { color: theme.text }]}>▲</Text>
                     </TouchableOpacity>
-                    <View style={styles.timeDisplayBox}>
-                      <Text style={styles.timeDisplayText}>{String(minute).padStart(2, "0")}</Text>
+                    <View style={[styles.timeDisplayBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                      <Text style={[styles.timeDisplayText, { color: theme.text }]}>{String(minute).padStart(2, "0")}</Text>
                     </View>
                     <TouchableOpacity
-                      style={styles.stepBtn}
+                      style={[styles.stepBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
                       onPress={() => handleStepMinute(-5)}
                       activeOpacity={0.7}
                       accessibilityLabel="Decrement Minute"
                     >
-                      <Text style={styles.stepBtnText}>▼</Text>
+                      <Text style={[styles.stepBtnText, { color: theme.text }]}>▼</Text>
                     </TouchableOpacity>
                   </View>
 
                   {/* AM / PM Toggle */}
                   <View style={styles.periodCol}>
-                    <Text style={styles.pickerColLabel}>PERIOD</Text>
+                    <Text style={[styles.pickerColLabel, { color: theme.textMuted }]}>PERIOD</Text>
                     <TouchableOpacity
-                      style={[styles.periodBtn, period === "AM" && styles.periodBtnActive]}
+                      style={[
+                        styles.periodBtn,
+                        { backgroundColor: theme.card, borderColor: theme.border },
+                        period === "AM" && [styles.periodBtnActive, { backgroundColor: theme.primary, borderColor: theme.primaryLight }],
+                      ]}
                       onPress={() => handleTogglePeriod("AM")}
                       activeOpacity={0.7}
                     >
-                      <Text style={[styles.periodBtnText, period === "AM" && styles.periodBtnTextActive]}>
+                      <Text
+                        style={[
+                          styles.periodBtnText,
+                          { color: theme.textSecondary },
+                          period === "AM" && [styles.periodBtnTextActive, { color: "#FFFFFF" }],
+                        ]}
+                      >
                         AM
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[styles.periodBtn, period === "PM" && styles.periodBtnActive]}
+                      style={[
+                        styles.periodBtn,
+                        { backgroundColor: theme.card, borderColor: theme.border },
+                        period === "PM" && [styles.periodBtnActive, { backgroundColor: theme.primary, borderColor: theme.primaryLight }],
+                      ]}
                       onPress={() => handleTogglePeriod("PM")}
                       activeOpacity={0.7}
                     >
-                      <Text style={[styles.periodBtnText, period === "PM" && styles.periodBtnTextActive]}>
+                      <Text
+                        style={[
+                          styles.periodBtnText,
+                          { color: theme.textSecondary },
+                          period === "PM" && [styles.periodBtnTextActive, { color: "#FFFFFF" }],
+                        ]}
+                      >
                         PM
                       </Text>
                     </TouchableOpacity>
@@ -463,20 +511,25 @@ export default function MedicationsTab() {
 
                 {/* Quick Minute Jumps */}
                 <View style={styles.minuteJumpsRow}>
-                  <Text style={styles.minuteJumpsLabel}>Quick Min:</Text>
+                  <Text style={[styles.minuteJumpsLabel, { color: theme.textMuted }]}>Quick Min:</Text>
                   {[0, 15, 30, 45].map((mVal) => {
                     const isMActive = minute === mVal;
                     return (
                       <TouchableOpacity
                         key={`min_${mVal}`}
-                        style={[styles.minuteJumpChip, isMActive && styles.minuteJumpChipActive]}
+                        style={[
+                          styles.minuteJumpChip,
+                          { backgroundColor: theme.card, borderColor: theme.border },
+                          isMActive && [styles.minuteJumpChipActive, { backgroundColor: theme.primary, borderColor: theme.primaryLight }],
+                        ]}
                         onPress={() => updateCustomTime(hour12, mVal, period)}
                         activeOpacity={0.7}
                       >
                         <Text
                           style={[
                             styles.minuteJumpChipText,
-                            isMActive && styles.minuteJumpChipTextActive,
+                            { color: theme.textSecondary },
+                            isMActive && [styles.minuteJumpChipTextActive, { color: "#FFFFFF" }],
                           ]}
                         >
                           :{String(mVal).padStart(2, "0")}
@@ -487,27 +540,29 @@ export default function MedicationsTab() {
                 </View>
 
                 {/* Active Schedule Preview Banner */}
-                <View style={styles.previewBox}>
-                  <Text style={styles.previewLabel}>SCHEDULED AT</Text>
-                  <Text style={styles.previewTime}>{form.time_label}</Text>
+                <View style={[styles.previewBox, { backgroundColor: isDark ? "#1E1B4B" : "#EEF2FF", borderColor: theme.border }]}>
+                  <Text style={[styles.previewLabel, { color: theme.textMuted }]}>SCHEDULED AT</Text>
+                  <Text style={[styles.previewTime, { color: theme.primary }]}>{form.time_label}</Text>
                 </View>
               </View>
 
-              <Text style={styles.inputLabel}>Instructions (Optional)</Text>
+              <Text style={[styles.inputLabel, { color: theme.textMuted }]}>Instructions (Optional)</Text>
               <View style={styles.instructionPresetsRow}>
                 {INSTRUCTION_PRESETS.map((preset) => (
                   <TouchableOpacity
                     key={preset}
                     style={[
                       styles.presetChip,
-                      form.instructions === preset && styles.presetChipSelected,
+                      { backgroundColor: theme.cardSecondary, borderColor: theme.border },
+                      form.instructions === preset && [styles.presetChipSelected, { backgroundColor: theme.primary, borderColor: theme.primaryLight }],
                     ]}
                     onPress={() => setForm((f) => ({ ...f, instructions: preset }))}
                   >
                     <Text
                       style={[
                         styles.presetChipText,
-                        form.instructions === preset && styles.presetChipTextSelected,
+                        { color: theme.textSecondary },
+                        form.instructions === preset && [styles.presetChipTextSelected, { color: "#FFFFFF" }],
                       ]}
                     >
                       {preset.split(" ")[0]}
@@ -517,9 +572,16 @@ export default function MedicationsTab() {
               </View>
 
               <TextInput
-                style={styles.input}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.inputBg,
+                    borderColor: theme.inputBorder,
+                    color: theme.inputText,
+                  },
+                ]}
                 placeholder="Custom instructions (e.g. after dinner)"
-                placeholderTextColor="#6B7280"
+                placeholderTextColor={theme.inputPlaceholder}
                 value={form.instructions}
                 onChangeText={(v) => setForm((f) => ({ ...f, instructions: v }))}
                 accessibilityLabel="Instructions input"
@@ -527,14 +589,14 @@ export default function MedicationsTab() {
 
               <View style={styles.modalButtons}>
                 <TouchableOpacity
-                  style={styles.cancelBtn}
+                  style={[styles.cancelBtn, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}
                   onPress={() => setModalVisible(false)}
                   disabled={saving}
                 >
-                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                  <Text style={[styles.cancelBtnText, { color: theme.textSecondary }]}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
+                  style={[styles.saveBtn, { backgroundColor: theme.primary }, saving && styles.saveBtnDisabled]}
                   onPress={handleAdd}
                   disabled={saving}
                 >

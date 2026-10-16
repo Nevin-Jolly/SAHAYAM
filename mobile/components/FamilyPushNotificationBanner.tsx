@@ -21,6 +21,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { useNavigation } from "@react-navigation/native";
+import { useTheme } from "../context/ThemeContext";
 
 const ELDER_ID = "elder_demo_001";
 
@@ -36,6 +37,7 @@ export default function FamilyPushNotificationBanner() {
   const slideAnim = useRef(new Animated.Value(-140)).current;
   const lastAlertIdRef = useRef<string | null>(null);
   const navigation = useNavigation<any>();
+  const { theme, isDark } = useTheme();
 
   useEffect(() => {
     let isMounted = true;
@@ -201,11 +203,23 @@ export default function FamilyPushNotificationBanner() {
         { transform: [{ translateY: slideAnim }] },
       ]}
     >
-      <View style={[styles.banner, isSos ? styles.bannerSos : styles.bannerMed]}>
+      <View
+        style={[
+          styles.banner,
+          isSos
+            ? [styles.bannerSos, !isDark && { backgroundColor: "#FEF2F2", borderColor: "#EF4444" }]
+            : [styles.bannerMed, !isDark && { backgroundColor: "#FFFBEB", borderColor: "#F59E0B" }],
+        ]}
+      >
         <View style={styles.topRow}>
           <View style={styles.badgeRow}>
             <Text style={styles.badgeDot}>🔴</Text>
-            <Text style={styles.badgeText}>
+            <Text
+              style={[
+                styles.badgeText,
+                !isDark && { color: isSos ? "#DC2626" : "#D97706" },
+              ]}
+            >
               {isSos
                 ? "അടിയന്തര പുഷ് അറിയിപ്പ് (SOS ALERT)"
                 : isMissedMed
@@ -218,24 +232,42 @@ export default function FamilyPushNotificationBanner() {
             onPress={handleDismiss}
             accessibilityLabel="Dismiss notification"
           >
-            <Text style={styles.closeBtnText}>✕</Text>
+            <Text style={[styles.closeBtnText, !isDark && { color: "#64748B" }]}>✕</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.bodyRow}>
           <Text style={styles.icon}>{isSos ? "🚨" : isMissedMed ? "💊" : "⚠️"}</Text>
           <View style={styles.textContainer}>
-            <Text style={styles.title}>
+            <Text
+              style={[
+                styles.title,
+                !isDark && { color: isSos ? "#991B1B" : "#92400E" },
+              ]}
+            >
               {isSos
                 ? "മുതിർന്നയാൾ SOS സഹായം ആവശ്യപ്പെട്ടു!"
                 : isMissedMed
                 ? "മരുന്ന് ചെക്ക്-ഇൻ വിട്ടുപോയി!"
                 : "അടിയന്തര മുന്നറിയിപ്പ് ലഭിച്ചു!"}
             </Text>
-            <Text style={styles.subtitle} numberOfLines={2}>
+            <Text
+              style={[
+                styles.subtitle,
+                !isDark && { color: isSos ? "#7F1D1D" : "#78350F" },
+              ]}
+              numberOfLines={2}
+            >
               {activeAlert.notes}
             </Text>
-            <Text style={styles.timeText}>സമയം: {activeAlert.timeStr}</Text>
+            <Text
+              style={[
+                styles.timeText,
+                !isDark && { color: isSos ? "#B91C1C" : "#B45309" },
+              ]}
+            >
+              സമയം: {activeAlert.timeStr}
+            </Text>
           </View>
         </View>
 

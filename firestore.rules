@@ -35,7 +35,7 @@ service cloud.firestore {
       // ── PRIVACY ENFORCEMENT: Elder Memories are STRICTLY ELDER-PRIVATE ──
       // Family members are FORBIDDEN from reading or querying elder memories.
       match /memories/{memoryId} {
-        allow read, write: if isAuthenticated() && request.auth.uid == elderId;
+        allow read, write: if isElder(elderId);
       }
 
       // Shared Care Data: Medications (Family & Elder can view & update)
